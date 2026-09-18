@@ -1,0 +1,59 @@
+COMO RODAR O SITE NO SEU PC (TESTE LOCAL)
+==========================================
+
+1. Extraia essa pasta em qualquer lugar do seu computador.
+
+2. Abra o Prompt de Comando (cmd) dentro dessa pasta.
+   Dica: dentro da pasta extraída, na barra de endereço do
+   Explorador de Arquivos, digite "cmd" e aperte Enter.
+
+3. Rode:
+   npm install
+
+   (isso baixa as bibliotecas: express, socket.io, multer, bcryptjs, uuid)
+
+4. Rode:
+   node server.js
+
+5. Abra o navegador em:
+   http://localhost:3000
+
+O QUE JÁ FUNCIONA
+==================
+- Cadastro só com email (sem telefone)
+- Limite de 3 contas por IP
+- Login
+- Buscar usuário por email/username pra iniciar conversa
+- Chat privado e em grupo
+- Mensagem de texto em tempo real
+- Responder mensagem
+- Editar mensagem (só até 1 minuto depois de enviada)
+- Apagar mensagem (qualquer hora)
+- Enviar áudio e vídeo (grava direto pelo microfone/câmera do navegador)
+- Arquivos de áudio/vídeo somem sozinhos depois de 12 horas
+  (o texto da mensagem continua existindo, só a mídia expira)
+
+ONDE FICAM OS DADOS
+====================
+Tudo fica salvo no arquivo data/db.json (usuários, chats, mensagens).
+Os arquivos de áudio/vídeo ficam na pasta uploads/.
+Isso é um "banco de dados" simples baseado em arquivo — funciona bem
+pra testar e pra poucos usuários, sem precisar pagar nada nem criar
+conta em serviço nenhum.
+
+QUANDO QUISER COLOCAR NO AR DE VERDADE (fora do seu PC)
+=========================================================
+Dá pra subir esse mesmo projeto grátis em serviços como Render ou
+Railway. Só um detalhe importante: nesses planos gratuitos o "disco"
+do servidor pode ser apagado quando ele reinicia — então o
+data/db.json e a pasta uploads/ podem se perder. Quando você quiser
+fazer esse deploy, me chama que a gente ajusta pra usar um banco de
+dados externo gratuito (tipo Supabase) que não perde os dados.
+
+LIMITAÇÕES ATUAIS (importante saber)
+======================================
+- Não tem chamada de voz/vídeo ao vivo — o "áudio e vídeo" aqui é
+  tipo o áudio do WhatsApp: você grava e manda como mensagem.
+- Não tem verificação de email por link, o cadastro é liberado na
+  hora.
+- Visual é simples, dá pra deixar mais bonito depois.

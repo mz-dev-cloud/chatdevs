@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>ChatDevs</title>
+  <link rel="icon" type="image/svg+xml" href="/img/logo.svg">
+  <script>
+    (function () {
+      var padrao = { tema: 'dark', fundo: 'nenhum', fonte: 'inter', negrito: false, cor: 'ambar' };
+      var cfg = padrao;
+      try {
+        var salvo = JSON.parse(localStorage.getItem('config') || '{}');
+        cfg = Object.assign({}, padrao, salvo);
+      } catch (e) {}
+      // migração de uma versão anterior que só guardava o tema
+      var temaAntigo = localStorage.getItem('tema');
+      if (temaAntigo && !localStorage.getItem('config')) cfg.tema = temaAntigo;
+
+      var html = document.documentElement;
+      html.setAttribute('data-theme', cfg.tema);
+      html.setAttribute('data-fundo', cfg.fundo);
+      html.setAttribute('data-fonte', cfg.fonte);
+      html.setAttribute('data-negrito', cfg.negrito ? '1' : '0');
+      html.setAttribute('data-cor-enviada', cfg.cor);
+    })();
+  </script>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- SPLASH -->
+  <div id="splash-screen" class="screen">
+    <img src="/img/logo.svg" alt="" class="logo-mark">
+    <p class="wordmark">ChatDevs</p>
+    <p class="welcome-text">Bem-vindo ao ChatDevs</p>
+    <div class="progress-track"><div class="progress-fill"></div></div>
+  </div>
+
+  <!-- LOGIN -->
+  <div id="login-screen" class="screen oculto">
+    <div class="auth-panel">
+      <img src="/img/logo.svg" alt="" class="logo-mark">
+      <h1>Entrar</h1>
+      <form onsubmit="event.preventDefault(); fazerLogin();">
+        <input id="login-user" class="campo" placeholder="Email ou usuário" autocomplete="username">
+        <input id="login-pass" class="campo" type="password" placeholder="Senha" autocomplete="current-password">
+        <p id="login-erro" class="erro-msg"></p>
+        <button type="submit" class="btn-ok">Entrar</button>
+      </form>
+      <div class="auth-links">
+        <button class="link-sutil" onclick="esqueceuSenha()">Esqueceu a senha?</button>
+        <button class="link-sutil" onclick="mostrarTela('cadastro')">Não tenho conta, criar uma</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CADASTRO -->
+  <div id="cadastro-screen" class="screen oculto">
+    <div class="auth-panel">
+      <img src="/img/logo.svg" alt="" class="logo-mark">
+      <h1>Criar conta</h1>
+      <form onsubmit="event.preventDefault(); fazerCadastro();">
+        <input id="reg-username" class="campo" placeholder="Nome de usuário" autocomplete="username">
+        <input id="reg-email" class="campo" placeholder="Email" autocomplete="email">
+        <input id="reg-pass" class="campo" type="password" placeholder="Senha" autocomplete="new-password">
+        <p id="reg-erro" class="erro-msg"></p>
+        <button type="submit" class="btn-ok">Criar conta</button>
+      </form>
+      <div class="auth-links">
+        <span></span>
+        <button class="link-sutil" onclick="mostrarTela('login')">Já tenho conta, entrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHAT / HOME -->
+  <div id="chat-screen" class="app-shell oculto">
+
+    <!-- Barra do topo -->
+    <div class="topbar">
+      <div class="topbar-brand">
+        <img src="/img/logo.svg" alt="">
+        <span>ChatDevs</span>
+      </div>
+      <div class="topbar-right">
+        <button class="menu-dots-btn mobile-only" id="btn-inicio-mobile" onclick="mostrarPainelMobile()" title="Início" aria-label="Ver tela inicial">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5"/><path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10"/></svg>
+        </button>
+        <div class="dropdown-wrap" id="wrap-avatar-topo">
+          <div class="avatar-circle" id="avatar-topo" title="Trocar de conta" onclick="abrirTrocaConta()">
+            <span id="avatar-inicial"></span>
+          </div>
+          <div id="menu-contas" class="dropdown-menu oculto"></div>
+        </div>
+        <div class="dropdown-wrap">
+          <button class="menu-dots-btn" onclick="alternarDropdown('menu-conta')" aria-label="Abrir menu da conta">⋮</button>
+          <div id="menu-conta" class="dropdown-menu oculto">
+            <div class="dropdown-item dropdown-clicavel" onclick="abrirConfiguracoes()">
+              <span>Configurações</span>
+            </div>
+            <div class="dropdown-item dropdown-clicavel" onclick="abrirBloqueados()">
+              <span>Usuários bloqueados</span>
+            </div>
+            <div class="dropdown-item dropdown-clicavel" onclick="abrirEditarPerfil()">
+              <span>Editar perfil</span>
+            </div>
+            <div class="dropdown-item dropdown-clicavel" onclick="sair()">
+              <span>Sair</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="app-body">
+
+      <!-- Barra lateral -->
+      <div class="app-sidebar">
+        <div class="dropdown-wrap search-row">
+          <input id="busca-input" placeholder="Buscar conversa" oninput="carregarListaChats()">
+          <button class="search-options-btn" onclick="alternarDropdown('menu-busca')" aria-label="Filtros de busca">⋮</button>
+          <div id="menu-busca" class="dropdown-menu oculto dropdown-menu-busca">
+            <div class="dropdown-item dropdown-clicavel" onclick="filtrarConversas('todas')">
+              <span>Todas as conversas</span>
+            </div>
+            <div class="dropdown-item dropdown-clicavel" onclick="filtrarConversas('grupo')">
+              <span>Somente grupos</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-actions">
+          <button onclick="abrirNovaConversa()" class="btn-ok btn-compacto">+ Nova conversa</button>
+          <button onclick="abrirNovoGrupo()" class="btn-outline btn-compacto">+ Novo grupo</button>
+        </div>
+
+        <div id="lista-chats" class="lista-chats"></div>
+
+        <div id="sem-conversas" class="empty-conversas oculto">
+          <p>Você ainda não tem nenhuma conversa.<br>Use o botão acima pra chamar alguém pelo nome de usuário ou email.</p>
+        </div>
+      </div>
+
+      <!-- Área principal -->
+      <div class="app-main">
+
+        <!-- Home (aparece quando nenhuma conversa está aberta) -->
+        <div id="home-view" class="home-inner">
+
+          <button class="btn-link mobile-only btn-voltar-lista-mobile" onclick="mostrarListaMobile()">← Conversas</button>
+
+          <div class="home-section">
+            <h2>Novidades</h2>
+            <p class="texto-vazio">Nenhuma novidade publicada ainda. Quando o time postar algo pela área administrativa, vai aparecer aqui.</p>
+          </div>
+
+          <div class="home-section">
+            <h2>Quem mais inicia conversas</h2>
+            <div id="ranking-usuarios"><p class="texto-vazio">Ainda não há dados suficientes.</p></div>
+          </div>
+
+          <div class="home-section">
+            <h2>Grupo mais ativo</h2>
+            <div id="grupo-destaque-wrap"><p class="texto-vazio">Ainda não há grupos com mensagens.</p></div>
+          </div>
+
+          <div class="home-section" id="suporte-section">
+            <h2>Suporte</h2>
+            <div class="suporte-row">
+              <p>Precisa de ajuda com sua conta ou encontrou um problema?</p>
+              <a class="btn-outline btn-compacto" href="mailto:suporte@chatdevs.exemplo?subject=Preciso%20de%20ajuda">Falar com o suporte</a>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Conversa aberta -->
+        <div id="chat-view" class="chat-view oculto">
+          <div class="chat-header">
+            <button class="btn-link" onclick="voltarHome()">← Voltar</button>
+            <div class="chat-header-info" id="chat-header-info" onclick="abrirInfoConversa()">
+              <div class="avatar-circle avatar-circle--sm" id="chat-header-avatar"><span id="chat-header-avatar-letra"></span></div>
+              <span id="chat-header-nome">Conversa</span>
+            </div>
+            <button class="menu-dots-btn oculto" id="btn-pedidos-grupo" onclick="abrirPedidosPendentes(chatAtualId)" title="Pedidos de entrada" aria-label="Pedidos de entrada pendentes">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              <span id="badge-pedidos-grupo" class="config-grupo-badge badge-flutuante oculto"></span>
+            </button>
+            <div class="dropdown-wrap">
+              <button class="menu-dots-btn" onclick="alternarDropdown('menu-chat-atual')" aria-label="Opções da conversa">⋮</button>
+              <div id="menu-chat-atual" class="dropdown-menu oculto"></div>
+            </div>
+          </div>
+          <div id="contato-banner" class="contato-banner oculto"></div>
+          <div id="mensagens" class="mensagens"></div>
+
+          <div id="reply-preview" class="reply-preview" style="display:none">
+            <div class="reply-preview-accent"></div>
+            <div class="reply-preview-body">
+              <div id="reply-preview-nome" class="reply-preview-nome"></div>
+              <div id="reply-preview-text" class="reply-preview-snippet"></div>
+            </div>
+            <button onclick="cancelarResposta()">✕</button>
+          </div>
+
+          <div class="input-area">
+            <div id="mencao-popup" class="mencao-popup oculto"></div>
+            <input id="input-texto" placeholder="Digite uma mensagem" onkeydown="if(event.key==='Enter') enviarTexto()">
+            <input type="file" id="input-anexo" style="display:none" accept="image/*,.pdf,.doc,.docx,audio/*,video/*" onchange="enviarAnexo(this.files[0])">
+            <button id="btn-anexo" onclick="document.getElementById('input-anexo').click()" title="Anexar foto ou arquivo" aria-label="Anexar arquivo">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 15l-5-5-9 9"/></svg>
+            </button>
+            <button id="btn-audio" onclick="alternarGravacao('audio')" title="Gravar áudio" aria-label="Gravar áudio">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+            </button>
+            <button onclick="enviarTexto()" title="Enviar" aria-label="Enviar mensagem">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+
+          <div id="barra-gravacao" class="barra-gravacao" style="display:none">
+            <button class="btn-cancelar-gravacao" onclick="cancelarGravacao()" title="Cancelar gravação" aria-label="Cancelar gravação">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+            <div class="barra-gravacao-info">
+              <span class="barra-gravacao-pulso"></span>
+              <span id="barra-gravacao-icone">🎤</span>
+              <span>Gravando...</span>
+              <span id="barra-gravacao-timer">0:00</span>
+            </div>
+            <button class="btn-enviar-gravacao" onclick="enviarGravacao()" title="Enviar gravação" aria-label="Enviar gravação">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="app-footer">
+      <span>ChatDevs · <span id="footer-ano"></span></span>
+      <div class="footer-social">
+        <a class="footer-icon" title="Email" aria-label="Enviar email"
+           href="mailto:daarrkk2.0@gmail.com?subject=D%C3%BAvida%20via%20site&body=Ol%C3%A1%2C%20vi%20do%20site...%20e%20tenho%20uma%20d%C3%BAvida%2Fquestionamento">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+        </a>
+        <a class="footer-icon" title="WhatsApp" aria-label="Falar no WhatsApp" target="_blank"
+           href="https://wa.me/55317191791?text=Ol%C3%A1%2C%20vi%20do%20site...%20e%20tenho%20uma%20d%C3%BAvida%2Fquestionamento">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12.04 2C6.58 2 2.13 6.45 2.13 11.91c0 1.75.46 3.45 1.32 4.95L2 22l5.28-1.39a9.9 9.9 0 0 0 4.76 1.21h.01c5.46 0 9.9-4.45 9.9-9.91C21.96 6.45 17.5 2 12.04 2Zm5.8 14.02c-.24.68-1.4 1.3-1.93 1.35-.5.05-.98.24-3.3-.7-2.8-1.13-4.6-3.98-4.75-4.16-.14-.19-1.14-1.52-1.14-2.9 0-1.37.72-2.05.97-2.33.25-.28.55-.35.73-.35h.53c.17 0 .4-.03.62.48.24.55.8 1.9.87 2.03.07.14.11.3.02.48-.1.19-.14.3-.28.46-.14.16-.3.36-.42.48-.14.14-.29.29-.13.57.17.28.75 1.24 1.62 2.01 1.11.99 2.05 1.3 2.33 1.45.28.14.44.12.6-.07.17-.19.71-.83.9-1.11.19-.28.38-.24.63-.14.26.09 1.63.77 1.9.91.28.14.46.21.53.33.07.12.07.68-.17 1.36Z"/></svg>
+        </a>
+        <a class="footer-icon" title="Telegram" aria-label="Falar no Telegram" target="_blank"
+           href="https://t.me/+55317191791?text=Ol%C3%A1%2C%20vi%20do%20site...%20e%20tenho%20uma%20d%C3%BAvida%2Fquestionamento">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M22 3 2.5 10.7c-1.2.5-1.2 1.2-.2 1.5l4.9 1.5 1.9 5.8c.2.6.4.8.9.8.4 0 .6-.2.9-.5l2.2-2.1 4.6 3.4c.8.5 1.4.2 1.6-.7l3-14c.3-1.2-.4-1.8-1.3-1.4Zm-4 3.4L9.3 13.5l-.4 3.6-1.7-5.3 10.8-6Z"/></svg>
+        </a>
+      </div>
+      <a href="#suporte-section" onclick="voltarHome()">Suporte</a>
+    </div>
+
+  </div>
+
+  <div id="modal-root"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+# Dependências — o Railway instala sozinho via npm install
+node_modules/
+
+# Arquivos de mídia enviados pelos usuários (vão pro Cloudinary depois)
+uploads/
+
+# Banco de dados local (vai pro MongoDB Atlas depois)
+data/db.json
+data/db.json.bak*
+
+# Variáveis de ambiente — NUNCA sobe pro GitHub
+.env
+
+# Sistema operacional
+.DS_Store
+Thumbs.db

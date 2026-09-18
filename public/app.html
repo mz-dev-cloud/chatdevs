@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>ZapZinho</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+  <!-- TELA DE LOGIN / CADASTRO -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-box">
+      <h2>Entrar</h2>
+      <input id="login-user" placeholder="Email ou usuário">
+      <input id="login-pass" type="password" placeholder="Senha">
+      <button onclick="fazerLogin()">Entrar</button>
+      <p id="login-erro" class="erro"></p>
+
+      <hr>
+
+      <h2>Criar conta</h2>
+      <input id="reg-username" placeholder="Nome de usuário">
+      <input id="reg-email" placeholder="Email">
+      <input id="reg-pass" type="password" placeholder="Senha">
+      <button onclick="fazerCadastro()">Cadastrar</button>
+      <p id="reg-erro" class="erro"></p>
+    </div>
+  </div>
+
+  <!-- TELA DO CHAT -->
+  <div id="chat-screen" class="chat-screen" style="display:none">
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <strong id="meu-nome"></strong>
+        <button onclick="sair()" class="btn-link">Sair</button>
+      </div>
+      <button onclick="abrirNovaConversa()" class="btn-primary btn-small">+ Nova conversa</button>
+      <button onclick="abrirNovoGrupo()" class="btn-secondary btn-small">+ Novo grupo</button>
+      <div id="lista-chats" class="lista-chats"></div>
+    </div>
+
+    <div class="chat-area">
+      <div id="chat-header" class="chat-header">Selecione uma conversa</div>
+      <div id="mensagens" class="mensagens"></div>
+
+      <div id="reply-preview" class="reply-preview" style="display:none">
+        <div class="reply-preview-accent"></div>
+        <div class="reply-preview-body">
+          <div id="reply-preview-nome" class="reply-preview-nome"></div>
+          <div id="reply-preview-text" class="reply-preview-snippet"></div>
+        </div>
+        <button onclick="cancelarResposta()">✕</button>
+      </div>
+
+      <div class="input-area">
+        <div id="mencao-popup" class="mencao-popup oculto"></div>
+        <input id="input-texto" placeholder="Digite uma mensagem" onkeydown="if(event.key==='Enter') enviarTexto()">
+        <button onclick="enviarTexto()">Enviar</button>
+        <button id="btn-audio" onclick="alternarGravacao('audio')">🎤</button>
+        <button id="btn-video" onclick="alternarGravacao('video')">🎥</button>
+      </div>
+
+      <div id="barra-gravacao" class="barra-gravacao" style="display:none">
+        <button class="btn-cancelar-gravacao" onclick="cancelarGravacao()" title="Cancelar gravação" aria-label="Cancelar gravação">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        </button>
+        <div class="barra-gravacao-info">
+          <span class="barra-gravacao-pulso"></span>
+          <span id="barra-gravacao-icone">🎤</span>
+          <span>Gravando...</span>
+          <span id="barra-gravacao-timer">0:00</span>
+        </div>
+        <button class="btn-enviar-gravacao" onclick="enviarGravacao()" title="Enviar gravação" aria-label="Enviar gravação">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>
