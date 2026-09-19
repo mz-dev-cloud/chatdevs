@@ -283,6 +283,46 @@ app.post('/api/verify-email', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Esqueci a senha — envia código por e-mail ----------
+app.post('/api/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  const db = await loadDB();
+  const user = db.users.find(u => u.email.toLowerCase() === (email || '').toLowerCase());
+  // Mesmo se o e-mail não existir, respondemos OK pra não vazar quais e-mails estão cadastrados
+  if (!user) return res.json({ ok: true, userId: null });
+
+  user.codigoReset = Math.floor(100000 + Math.random() * 900000).toString();
+  user.codigoResetExpira = Date.now() + 15 * 60 * 1000; // 15 minutos
+  await saveDB(db);
+
+  mailer.sendMail({
+    from: `"ChatDevs" <${process.env.EMAIL_USER}>`,
+    to: user.email,
+    subject: 'Redefinir senha — ChatDevs',
+    html: `<p>Olá <b>${user.username}</b>!<br>Seu código para redefinir a senha é: <b style="font-size:24px">${user.codigoReset}</b></p><p>Válido por 15 minutos. Se não foi você, ignore este e-mail.</p>`,
+  }).catch(err => console.error('[email] Erro ao enviar reset:', err));
+
+  res.json({ ok: true, userId: user.id });
+});
+
+// ---------- Redefinir senha com código ----------
+app.post('/api/reset-password', async (req, res) => {
+  const { userId, codigo, novaSenha } = req.body;
+  const db = await loadDB();
+  const user = db.users.find(u => u.id === userId);
+  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+  if (!user.codigoReset) return res.status(400).json({ error: 'Nenhum código solicitado.' });
+  if (Date.now() > user.codigoResetExpira) return res.status(400).json({ error: 'Código expirado. Solicite um novo.' });
+  if (user.codigoReset !== String(codigo).trim()) return res.status(400).json({ error: 'Código incorreto.' });
+  if (!novaSenha || novaSenha.length < 6) return res.status(400).json({ error: 'Senha muito curta (mínimo 6 caracteres).' });
+
+  user.passwordHash = await bcrypt.hash(novaSenha, 10);
+  user.codigoReset = null;
+  user.codigoResetExpira = null;
+  await saveDB(db);
+  res.json({ ok: true });
+});
+
 // ---------- Reenviar código ----------
 app.post('/api/resend-verification', async (req, res) => {
   const { userId } = req.body;
