@@ -124,8 +124,132 @@ function adicionarConta() {
   mostrarTela('login');
 }
 
+async function redefinirSenhaNasConfigs() {
+  if (!usuarioAtual) return;
+
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal-box">
+        <h3 class="modal-title">Trocar senha</h3>
+        <p class="modal-texto">Vamos enviar um código para <b>${escapeHtml(usuarioAtual.email || 'seu e-mail')}</b>.</p>
+        <div class="modal-actions">
+          <button class="btn-outline btn-compacto" id="rds-cancelar" type="button">Cancelar</button>
+          <button class="btn-ok btn-compacto" id="rds-enviar" type="button">Enviar código</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('rds-cancelar').onclick = () => { root.innerHTML = ''; };
+  document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') root.innerHTML = ''; };
+
+  document.getElementById('rds-enviar').onclick = async () => {
+    const btn = document.getElementById('rds-enviar');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+    const resp = await fetch('/api/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: usuarioAtual.email })
+    });
+    const data = await resp.json();
+    btn.disabled = false;
+    if (!resp.ok) { mostrarAviso(data.error || 'Erro ao enviar.'); return; }
+    root.innerHTML = '';
+    mostrarTelaRedefinirSenha(data.userId, usuarioAtual.email);
+  };
+}
+
 function esqueceuSenha() {
-  mostrarAviso('Recuperação de senha ainda não foi implementada.');
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal-box">
+        <h3 class="modal-title">Recuperar senha</h3>
+        <p class="modal-texto">Digite seu e-mail e enviaremos um código para redefinir sua senha.</p>
+        <input class="modal-input" id="reset-email" type="email" placeholder="seu@email.com" autocomplete="email">
+        <p class="modal-erro" id="reset-erro"></p>
+        <div class="modal-actions">
+          <button class="btn-outline btn-compacto" id="reset-cancelar" type="button">Cancelar</button>
+          <button class="btn-ok btn-compacto" id="reset-enviar" type="button">Enviar código</button>
+        </div>
+      </div>
+    </div>`;
+
+  const fechar = () => { root.innerHTML = ''; };
+  document.getElementById('reset-cancelar').onclick = fechar;
+  document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') fechar(); };
+  document.getElementById('reset-email').focus();
+
+  document.getElementById('reset-enviar').onclick = async () => {
+    const email = document.getElementById('reset-email').value.trim();
+    const erroEl = document.getElementById('reset-erro');
+    erroEl.textContent = '';
+    if (!email) { erroEl.textContent = 'Digite seu e-mail.'; return; }
+
+    const btn = document.getElementById('reset-enviar');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+
+    const resp = await fetch('/api/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const data = await resp.json();
+    btn.disabled = false; btn.textContent = 'Enviar código';
+
+    if (!resp.ok) { erroEl.textContent = data.error || 'Erro ao enviar.'; return; }
+    fechar();
+    mostrarTelaRedefinirSenha(data.userId, email);
+  };
+}
+
+function mostrarTelaRedefinirSenha(userId, email) {
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal-box">
+        <h3 class="modal-title">Nova senha</h3>
+        <p class="modal-texto">Enviamos um código de 6 dígitos para <b>${escapeHtml(email)}</b>.</p>
+        <input class="modal-input" id="reset-codigo" type="text" inputmode="numeric" maxlength="6" placeholder="Código de 6 dígitos">
+        <input class="modal-input" id="reset-nova-senha" type="password" placeholder="Nova senha" style="margin-top:8px">
+        <input class="modal-input" id="reset-confirmar-senha" type="password" placeholder="Confirmar nova senha" style="margin-top:8px">
+        <p class="modal-erro" id="reset-erro"></p>
+        <div class="modal-actions">
+          <button class="btn-outline btn-compacto" id="reset-cancelar" type="button">Cancelar</button>
+          <button class="btn-ok btn-compacto" id="reset-confirmar" type="button">Redefinir</button>
+        </div>
+      </div>
+    </div>`;
+
+  document.getElementById('reset-cancelar').onclick = () => { root.innerHTML = ''; };
+  document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') root.innerHTML = ''; };
+
+  document.getElementById('reset-confirmar').onclick = async () => {
+    const codigo = document.getElementById('reset-codigo').value.trim();
+    const novaSenha = document.getElementById('reset-nova-senha').value;
+    const confirmar = document.getElementById('reset-confirmar-senha').value;
+    const erroEl = document.getElementById('reset-erro');
+    erroEl.textContent = '';
+
+    if (!codigo || !novaSenha) { erroEl.textContent = 'Preencha todos os campos.'; return; }
+    if (novaSenha !== confirmar) { erroEl.textContent = 'As senhas não coincidem.'; return; }
+    if (novaSenha.length < 6) { erroEl.textContent = 'Senha muito curta (mínimo 6 caracteres).'; return; }
+
+    const btn = document.getElementById('reset-confirmar');
+    btn.disabled = true; btn.textContent = 'Salvando...';
+
+    const resp = await fetch('/api/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, codigo, novaSenha })
+    });
+    const data = await resp.json();
+    btn.disabled = false; btn.textContent = 'Redefinir';
+
+    if (!resp.ok) { erroEl.textContent = data.error || 'Erro ao redefinir.'; return; }
+    root.innerHTML = '';
+    mostrarAviso('Senha redefinida! Faça login com a nova senha.', 'sucesso');
+  };
 }
 
 // ---------- Avisos (substituem os alert() feios) ----------
@@ -289,16 +413,10 @@ function renderConfigModal() {
         <div class="config-grupo">
           <span class="config-label">Fundo das conversas</span>
           <div class="swatches">
-            <button class="swatch-fundo ${c.fundo === 'nenhum'   ? 'ativo' : ''}" onclick="definirConfig('fundo','nenhum')"   title="Nenhum"></button>
-            <button class="swatch-fundo fundo-pontos   ${c.fundo === 'pontos'   ? 'ativo' : ''}" onclick="definirConfig('fundo','pontos')"   title="Pontilhado"></button>
+            <button class="swatch-fundo ${c.fundo === 'nenhum' ? 'ativo' : ''}" onclick="definirConfig('fundo','nenhum')" title="Nenhum"></button>
+            <button class="swatch-fundo fundo-pontos ${c.fundo === 'pontos' ? 'ativo' : ''}" onclick="definirConfig('fundo','pontos')" title="Pontilhado"></button>
             <button class="swatch-fundo fundo-diagonal ${c.fundo === 'diagonal' ? 'ativo' : ''}" onclick="definirConfig('fundo','diagonal')" title="Diagonal"></button>
-            <button class="swatch-fundo fundo-bolhas   ${c.fundo === 'bolhas'   ? 'ativo' : ''}" onclick="definirConfig('fundo','bolhas')"   title="Bolhas"></button>
-            <button class="swatch-fundo fundo-aurora   ${c.fundo === 'aurora'   ? 'ativo' : ''}" onclick="definirConfig('fundo','aurora')"   title="Aurora"></button>
-            <button class="swatch-fundo fundo-grade    ${c.fundo === 'grade'    ? 'ativo' : ''}" onclick="definirConfig('fundo','grade')"    title="Grade"></button>
-            <button class="swatch-fundo fundo-hexagono ${c.fundo === 'hexagono' ? 'ativo' : ''}" onclick="definirConfig('fundo','hexagono')" title="Hexágono"></button>
-            <button class="swatch-fundo fundo-nuvens   ${c.fundo === 'nuvens'   ? 'ativo' : ''}" onclick="definirConfig('fundo','nuvens')"   title="Nuvens"></button>
-            <button class="swatch-fundo fundo-noise    ${c.fundo === 'noise'    ? 'ativo' : ''}" onclick="definirConfig('fundo','noise')"    title="Granulado"></button>
-            <button class="swatch-fundo fundo-ondas    ${c.fundo === 'ondas'    ? 'ativo' : ''}" onclick="definirConfig('fundo','ondas')"    title="Ondas"></button>
+            <button class="swatch-fundo fundo-bolhas ${c.fundo === 'bolhas' ? 'ativo' : ''}" onclick="definirConfig('fundo','bolhas')" title="Bolhas"></button>
           </div>
         </div>
 
@@ -322,6 +440,11 @@ function renderConfigModal() {
             <button class="swatch-cor cor-azul ${c.cor === 'azul' ? 'ativo' : ''}" onclick="definirConfig('cor','azul')" title="Azul"></button>
             <button class="swatch-cor cor-verde ${c.cor === 'verde' ? 'ativo' : ''}" onclick="definirConfig('cor','verde')" title="Verde"></button>
           </div>
+        </div>
+
+        <div class="config-grupo">
+          <span class="config-label">Conta</span>
+          <button class="btn-outline btn-compacto" onclick="redefinirSenhaNasConfigs()" type="button" style="margin-top:4px">🔑 Trocar senha</button>
         </div>
 
         <div class="modal-actions">
@@ -353,6 +476,64 @@ function filtrarConversas(tipo) {
   document.getElementById('menu-busca').classList.add('oculto');
 }
 
+// ---------- Verificação de e-mail ----------
+function mostrarTelaVerificacao(userId, email) {
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal-box">
+        <h3 class="modal-title">✉️ Confirme seu e-mail</h3>
+        <p class="modal-texto">Enviamos um código de 6 dígitos para <b>${escapeHtml(email || 'seu e-mail')}</b>.<br>Digite abaixo para ativar sua conta.</p>
+        <input class="modal-input" id="verif-codigo" type="text" inputmode="numeric" maxlength="6" placeholder="000000" style="text-align:center;font-size:22px;letter-spacing:6px">
+        <p class="modal-erro" id="verif-erro"></p>
+        <div class="modal-actions" style="flex-direction:column;gap:8px">
+          <button class="btn-ok" id="verif-confirmar" type="button">Verificar</button>
+          <button class="btn-link" id="verif-reenviar" type="button">Reenviar código</button>
+        </div>
+      </div>
+    </div>`;
+
+  const input = document.getElementById('verif-codigo');
+  input.focus();
+
+  document.getElementById('verif-confirmar').onclick = async () => {
+    const codigo = input.value.trim();
+    const erroEl = document.getElementById('verif-erro');
+    erroEl.textContent = '';
+    if (codigo.length !== 6) { erroEl.textContent = 'Digite os 6 dígitos.'; return; }
+
+    const btn = document.getElementById('verif-confirmar');
+    btn.disabled = true; btn.textContent = 'Verificando...';
+
+    const resp = await fetch('/api/verify-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId, codigo })
+    });
+    const data = await resp.json();
+    btn.disabled = false; btn.textContent = 'Verificar';
+
+    if (!resp.ok) { erroEl.textContent = data.error || 'Código inválido.'; return; }
+    root.innerHTML = '';
+    mostrarAviso('E-mail confirmado! Bem-vindo 🎉', 'sucesso');
+    entrarNoChat();
+  };
+
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('verif-confirmar').click(); });
+
+  document.getElementById('verif-reenviar').onclick = async () => {
+    const btn = document.getElementById('verif-reenviar');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+    await fetch('/api/resend-verification', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId })
+    });
+    btn.disabled = false; btn.textContent = 'Reenviar código';
+    mostrarAviso('Novo código enviado!', 'sucesso');
+  };
+}
+
 // ---------- Auth ----------
 async function fazerCadastro() {
   const username = document.getElementById('reg-username').value.trim();
@@ -371,7 +552,12 @@ async function fazerCadastro() {
 
   usuarioAtual = data.user;
   salvarConta(usuarioAtual);
-  entrarNoChat();
+
+  if (data.verificacaoPendente) {
+    mostrarTelaVerificacao(usuarioAtual.id, email);
+  } else {
+    entrarNoChat();
+  }
 }
 
 async function fazerLogin() {
@@ -386,7 +572,16 @@ async function fazerLogin() {
     body: JSON.stringify({ emailOrUsername, password })
   });
   const data = await resp.json();
-  if (!resp.ok) { erroEl.textContent = data.error; return; }
+  if (!resp.ok) {
+    if (data.verificacaoPendente && data.userId) {
+      // conta existe mas email não foi confirmado ainda
+      const emailDigitado = emailOrUsername.includes('@') ? emailOrUsername : '';
+      mostrarTelaVerificacao(data.userId, emailDigitado);
+      return;
+    }
+    erroEl.textContent = data.error;
+    return;
+  }
 
   usuarioAtual = data.user;
   salvarConta(usuarioAtual);
@@ -892,7 +1087,6 @@ async function abrirChat(chatId, nome, tipo, outroId, outroEmail, removidoDoGrup
   chatAtualSouDono = false;
   chatAtualMembros = [];
   esconderMencaoPopup();
-  sairDoModoEncaminhar();
 
   document.getElementById('chat-header-nome').textContent = nome;
   document.getElementById('chat-header-avatar').innerHTML = avatarInnerHtml(nome, photoUrl || null);
@@ -1558,14 +1752,19 @@ async function apagarConversa(chatId, removido) {
   const aceitou = await abrirConfirmacao({ titulo: 'Apagar conversa', mensagem, textoBotao: 'Apagar' });
   if (!aceitou) return;
 
-  await fetch(`/api/chats/${chatId}/delete`, {
+  const respDel = await fetch(`/api/chats/${chatId}/delete`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ userId: usuarioAtual.id })
   });
+  if (!respDel.ok) { mostrarAviso('Não foi possível apagar a conversa.'); return; }
+
+  // remove do cache local imediatamente — não espera o servidor pra sumir da lista
+  todasAsConversas = todasAsConversas.filter(c => c.id !== chatId);
+  renderizarListaChats();
 
   if (chatAtualId === chatId) voltarHome();
-  carregarListaChats();
+  await carregarListaChats(); // recarrega do servidor pra confirmar
   carregarStats();
 }
 
@@ -1633,6 +1832,10 @@ function voltarHome() {
 // ---------- Renderizar mensagens ----------
 function renderizarMensagem(msg) {
   const container = document.getElementById('mensagens');
+  // Proteção contra duplicata: no chat consigo mesmo o servidor emite
+  // new_message uma vez por membro (dois membros = mesmo userId duas vezes),
+  // então o mesmo evento pode chegar duas vezes pro mesmo socket.
+  if (container.querySelector(`[data-id="${msg.id}"]`)) return;
   const el = criarElementoMensagem(msg);
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
@@ -1689,7 +1892,7 @@ function criarElementoMensagem(msg) {
     conteudoHtml = `<div class="conteudo apagada">Mensagem apagada</div>`;
   } else if (msg.type === 'audio') {
     conteudoHtml = msg.mediaUrl
-      ? `<div class="conteudo">${montarPlayerAudio(msg)}</div>`
+      ? `<div class="conteudo"><audio controls src="${msg.mediaUrl}"></audio></div>`
       : `<div class="conteudo apagada">Áudio expirado (12h)</div>`;
   } else if (msg.type === 'video') {
     conteudoHtml = msg.mediaUrl
@@ -1726,7 +1929,6 @@ function criarElementoMensagem(msg) {
 
   let acoesHtml = '<div class="acoes">';
   acoesHtml += `<span onclick="responderMensagem('${msg.id}')">Responder</span>`;
-  if (!msg.deleted) acoesHtml += `<span onclick="iniciarEncaminhar('${msg.id}')">Encaminhar</span>`;
   if (minha && !msg.deleted) {
     if (Date.now() - msg.createdAt < 60000 && msg.type === 'text') {
       acoesHtml += `<span onclick="editarMensagem('${msg.id}')">Editar</span>`;
@@ -1735,12 +1937,7 @@ function criarElementoMensagem(msg) {
   }
   acoesHtml += '</div>';
 
-  const etiquetaEncaminhada = (msg.encaminhada && !msg.deleted)
-    ? '<div class="msg-encaminhada">↪ Encaminhada</div>'
-    : '';
-  div.innerHTML = `<span class="swipe-icone-responder">↩</span><span class="msg-check">✓</span>${btnResponderRapidoHtml}${remetenteHtml}${etiquetaEncaminhada}${replyHtml}${conteudoHtml}${linkBtnHtml}<div class="hora">${hora}${editadoTxt}</div>${acoesHtml}`;
-  ligarPlayerAudio(div);
-  if (msgsSelecionadas.has(msg.id)) div.classList.add('msg-selecionada');
+  div.innerHTML = `<span class="swipe-icone-responder">↩</span>${btnResponderRapidoHtml}${remetenteHtml}${replyHtml}${conteudoHtml}${linkBtnHtml}<div class="hora">${hora}${editadoTxt}</div>${acoesHtml}`;
   const btnLink = div.querySelector('.btn-acessar-link');
   if (btnLink) {
     const codigoConvite = extrairCodigoConvite(btnLink.dataset.url);
@@ -1790,20 +1987,6 @@ async function abrirEditarPerfil() {
   const respPriv = await fetch(`/api/users/${usuarioAtual.id}/photo-privacy`);
   const priv = await respPriv.json();
 
-  const respPerfil = await fetch(`/api/users/${usuarioAtual.id}/public?viewerId=${usuarioAtual.id}`);
-  const perfil = respPerfil.ok ? await respPerfil.json() : { bio: '' };
-
-  const bioHtml = `
-    <div class="config-grupo">
-      <span class="config-label">Sua bio (até ${LIMITE_BIO} caracteres)</span>
-      <div class="convite-link-row">
-        <input class="modal-input" id="perfil-bio" type="text" maxlength="${LIMITE_BIO}"
-               placeholder="ex: dev e cafeinado" value="${escapeAttr(perfil.bio || '')}">
-        <button class="btn-outline btn-compacto" id="perfil-bio-salvar" type="button">Salvar</button>
-      </div>
-      <small class="perfil-bio-contador" id="perfil-bio-contador">${(perfil.bio || '').length}/${LIMITE_BIO}</small>
-    </div>`;
-
   const acoesFotoHtml = `
     <div class="info-grupo-acoes-foto">
       <button class="link-sutil" id="perfil-trocar-foto" type="button">Trocar foto</button>
@@ -1846,7 +2029,6 @@ async function abrirEditarPerfil() {
           ${acoesFotoHtml}
           <input type="file" id="perfil-foto-input" accept="image/*" style="display:none">
         </div>
-        ${bioHtml}
         ${privacidadeHtml}
         <div class="modal-actions">
           <button class="btn-ok btn-compacto" id="perfil-fechar" type="button">Fechar</button>
@@ -1866,14 +2048,6 @@ async function abrirEditarPerfil() {
   document.querySelectorAll('input[name="foto-privacidade"]').forEach(radio => {
     radio.onchange = () => mudarPrivacidadeFoto(radio.value);
   });
-
-  const inputBio = document.getElementById('perfil-bio');
-  const contadorBio = document.getElementById('perfil-bio-contador');
-  inputBio.addEventListener('input', () => {
-    contadorBio.textContent = `${inputBio.value.length}/${LIMITE_BIO}`;
-  });
-  inputBio.addEventListener('keydown', e => { if (e.key === 'Enter') salvarBio(inputBio.value); });
-  document.getElementById('perfil-bio-salvar').onclick = () => salvarBio(inputBio.value);
 
   const inputBusca = document.getElementById('privacidade-lista-busca');
   document.getElementById('privacidade-lista-add').onclick = () => adicionarNaListaPrivacidade(inputBusca.value.trim());
@@ -2433,293 +2607,3 @@ async function enviarAnexo(file) {
   document.addEventListener('touchend', onTouchEnd, { passive: true });
   document.addEventListener('touchcancel', onTouchEnd, { passive: true });
 })();
-// =========================================================
-//  PLAYER DE ÁUDIO
-// =========================================================
-const AUDIO_BARRAS = 34;
-
-function ondasDoAudio(seed) {
-  let n = 7;
-  for (let i = 0; i < (seed || '').length; i++) n = (n * 31 + seed.charCodeAt(i)) % 2147483647;
-  let html = '';
-  for (let i = 0; i < AUDIO_BARRAS; i++) {
-    n = (n * 1103515245 + 12345) % 2147483647;
-    const altura = 20 + (n % 80);
-    html += `<span class="audio-barra" style="height:${altura}%"></span>`;
-  }
-  return html;
-}
-
-function montarPlayerAudio(msg) {
-  return `
-    <div class="audio-player">
-      <button class="audio-btn" type="button" aria-label="Tocar áudio">
-        <svg class="audio-icone audio-icone-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
-        <svg class="audio-icone audio-icone-pause oculto" viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h4v14H7zm6 0h4v14h-4z"/></svg>
-      </button>
-      <div class="audio-meio">
-        <div class="audio-onda">${ondasDoAudio(msg.id)}</div>
-        <div class="audio-rodape">
-          <span class="audio-tempo">0:00</span>
-          <button class="audio-velocidade" type="button" title="Velocidade">1×</button>
-        </div>
-      </div>
-      <audio preload="metadata" src="${escapeAttr(msg.mediaUrl)}"></audio>
-    </div>`;
-}
-
-function formatarTempoAudio(seg) {
-  if (!isFinite(seg) || seg < 0) return '0:00';
-  const m = Math.floor(seg / 60);
-  const s = Math.floor(seg % 60);
-  return `${m}:${String(s).padStart(2, '0')}`;
-}
-
-function pausarOutrosAudios(atual) {
-  document.querySelectorAll('.audio-player audio').forEach(a => {
-    if (a !== atual && !a.paused) a.pause();
-  });
-}
-
-function ligarPlayerAudio(divMsg) {
-  const player = divMsg.querySelector('.audio-player');
-  if (!player) return;
-  const audio = player.querySelector('audio');
-  const btn = player.querySelector('.audio-btn');
-  const onda = player.querySelector('.audio-onda');
-  const barras = Array.from(player.querySelectorAll('.audio-barra'));
-  const tempoEl = player.querySelector('.audio-tempo');
-  const btnVel = player.querySelector('.audio-velocidade');
-  const iconePlay = player.querySelector('.audio-icone-play');
-  const iconePause = player.querySelector('.audio-icone-pause');
-  const velocidades = [1, 1.5, 2];
-  let velocidadeAtual = 0;
-  let consertandoDuracao = false;
-
-  function pintar(fracao) {
-    const ate = Math.round(fracao * barras.length);
-    barras.forEach((b, i) => b.classList.toggle('tocada', i < ate));
-  }
-
-  audio.addEventListener('loadedmetadata', () => {
-    if (audio.duration === Infinity && !consertandoDuracao) {
-      consertandoDuracao = true;
-      audio.currentTime = 1e5;
-      return;
-    }
-    tempoEl.textContent = formatarTempoAudio(audio.duration);
-  });
-  audio.addEventListener('durationchange', () => {
-    if (consertandoDuracao && isFinite(audio.duration)) {
-      consertandoDuracao = false;
-      audio.currentTime = 0;
-      tempoEl.textContent = formatarTempoAudio(audio.duration);
-    }
-  });
-
-  btn.onclick = () => {
-    if (audio.paused) { pausarOutrosAudios(audio); audio.play(); }
-    else audio.pause();
-  };
-  audio.addEventListener('play', () => {
-    player.classList.add('tocando');
-    iconePlay.classList.add('oculto');
-    iconePause.classList.remove('oculto');
-  });
-  ['pause', 'ended'].forEach(ev => audio.addEventListener(ev, () => {
-    player.classList.remove('tocando');
-    iconePlay.classList.remove('oculto');
-    iconePause.classList.add('oculto');
-    if (ev === 'ended') { pintar(0); tempoEl.textContent = formatarTempoAudio(audio.duration); }
-  }));
-  audio.addEventListener('timeupdate', () => {
-    if (consertandoDuracao) return;
-    if (isFinite(audio.duration) && audio.duration > 0) pintar(audio.currentTime / audio.duration);
-    tempoEl.textContent = formatarTempoAudio(audio.currentTime);
-  });
-  onda.onclick = e => {
-    if (!isFinite(audio.duration) || !audio.duration) return;
-    const rect = onda.getBoundingClientRect();
-    const fracao = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
-    audio.currentTime = fracao * audio.duration;
-    pintar(fracao);
-  };
-  btnVel.onclick = () => {
-    velocidadeAtual = (velocidadeAtual + 1) % velocidades.length;
-    audio.playbackRate = velocidades[velocidadeAtual];
-    btnVel.textContent = velocidades[velocidadeAtual] + '×';
-  };
-}
-
-// =========================================================
-//  ENCAMINHAR (máx 5)
-// =========================================================
-const MAX_ENCAMINHAR = 5;
-let modoEncaminhar = false;
-let msgsSelecionadas = new Set();
-
-function iniciarEncaminhar(id) {
-  modoEncaminhar = true;
-  msgsSelecionadas = new Set([id]);
-  const container = document.getElementById('mensagens');
-  if (container) container.classList.add('selecionando');
-  document.querySelectorAll('#mensagens .msg').forEach(el => {
-    el.classList.toggle('msg-selecionada', msgsSelecionadas.has(el.dataset.id));
-  });
-  mostrarBarraEncaminhar();
-}
-
-function alternarSelecaoMsg(id, el) {
-  if (msgsSelecionadas.has(id)) {
-    msgsSelecionadas.delete(id);
-    el.classList.remove('msg-selecionada');
-  } else {
-    if (msgsSelecionadas.size >= MAX_ENCAMINHAR) {
-      mostrarAviso(`Máximo de ${MAX_ENCAMINHAR} mensagens por vez.`);
-      return;
-    }
-    msgsSelecionadas.add(id);
-    el.classList.add('msg-selecionada');
-  }
-  if (!msgsSelecionadas.size) { sairDoModoEncaminhar(); return; }
-  mostrarBarraEncaminhar();
-}
-
-document.addEventListener('click', e => {
-  if (!modoEncaminhar) return;
-  const el = e.target.closest('#mensagens .msg');
-  if (!el || !el.dataset.id) return;
-  e.preventDefault();
-  e.stopPropagation();
-  alternarSelecaoMsg(el.dataset.id, el);
-}, true);
-
-function mostrarBarraEncaminhar() {
-  let barra = document.getElementById('barra-encaminhar');
-  if (!barra) {
-    barra = document.createElement('div');
-    barra.id = 'barra-encaminhar';
-    barra.className = 'barra-encaminhar';
-    const chatView = document.getElementById('chat-view');
-    if (chatView) chatView.appendChild(barra);
-  }
-  barra.innerHTML = `
-    <span class="barra-encaminhar-info">${msgsSelecionadas.size} de ${MAX_ENCAMINHAR} selecionada${msgsSelecionadas.size === 1 ? '' : 's'}</span>
-    <button class="btn-link" type="button" onclick="sairDoModoEncaminhar()">Cancelar</button>
-    <button class="btn-ok btn-compacto" type="button" onclick="abrirDestinoEncaminhar()">Encaminhar →</button>`;
-}
-
-function sairDoModoEncaminhar() {
-  modoEncaminhar = false;
-  msgsSelecionadas = new Set();
-  const container = document.getElementById('mensagens');
-  if (container) container.classList.remove('selecionando');
-  document.querySelectorAll('.msg-selecionada').forEach(el => el.classList.remove('msg-selecionada'));
-  const barra = document.getElementById('barra-encaminhar');
-  if (barra) barra.remove();
-}
-
-function abrirDestinoEncaminhar() {
-  const destinos = todasAsConversas.filter(c => !c.removidoDoGrupo);
-  const root = document.getElementById('modal-root');
-  const linhas = destinos.length
-    ? destinos.map(c => `
-        <div class="dropdown-item conta-item dropdown-clicavel" onclick="encaminharPara('${c.id}')">
-          <span class="conta-info">
-            <span class="avatar-circle avatar-circle--sm">${avatarInnerHtml(c.name, c.photoUrl)}</span>
-            <span>${escapeHtml(c.name)}</span>
-          </span>
-          ${c.type === 'group' ? '<span class="tag-papel tag-admin">Grupo</span>' : ''}
-        </div>`).join('')
-    : '<p class="modal-texto">Você não tem conversas para encaminhar.</p>';
-
-  root.innerHTML = `
-    <div class="modal-overlay" id="modal-overlay">
-      <div class="modal-box">
-        <h3 class="modal-title">Encaminhar para</h3>
-        <p class="modal-texto">${msgsSelecionadas.size} mensagem${msgsSelecionadas.size === 1 ? '' : 's'} selecionada${msgsSelecionadas.size === 1 ? '' : 's'}.</p>
-        <div class="lista-contatos">${linhas}</div>
-        <div class="modal-actions">
-          <button class="btn-outline btn-compacto" id="encaminhar-cancelar" type="button">Cancelar</button>
-        </div>
-      </div>
-    </div>`;
-
-  document.getElementById('encaminhar-cancelar').onclick = () => { root.innerHTML = ''; };
-  document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') root.innerHTML = ''; };
-}
-
-function encaminharPara(chatId) {
-  const msgs = Array.from(msgsSelecionadas)
-    .map(id => mensagensCacheAtual.get(id))
-    .filter(m => m && !m.deleted);
-  document.getElementById('modal-root').innerHTML = '';
-  if (!msgs.length) { sairDoModoEncaminhar(); return; }
-  msgs.forEach(m => socket.emit('send_message', {
-    chatId,
-    userId: usuarioAtual.id,
-    type: m.type,
-    content: m.content,
-    mediaUrl: m.mediaUrl,
-    encaminhada: true
-  }));
-  const total = msgs.length;
-  sairDoModoEncaminhar();
-  mostrarAviso(`${total} mensagem${total === 1 ? '' : 's'} encaminhada${total === 1 ? '' : 's'}.`, 'sucesso');
-  carregarListaChats();
-}
-
-// =========================================================
-//  PERFIL DA PESSOA (PV)
-// =========================================================
-function abrirInfoConversa() {
-  if (chatAtualTipo === 'group') { abrirInfoGrupo(); return; }
-  if (chatAtualOutro) abrirPerfilUsuario(chatAtualOutro.id);
-}
-
-async function abrirPerfilUsuario(userId) {
-  const resp = await fetch(`/api/users/${userId}/public?viewerId=${usuarioAtual.id}`);
-  if (!resp.ok) { mostrarAviso('Não foi possível abrir esse perfil.'); return; }
-  const u = await resp.json();
-  const root = document.getElementById('modal-root');
-  const fotoHtml = u.photoUrl
-    ? `<img class="perfil-foto-grande" src="${escapeAttr(u.photoUrl)}" alt="" onclick="window.open('${escapeAttr(u.photoUrl)}','_blank')" title="Ver foto em tamanho grande">`
-    : `<div class="avatar-circle avatar-circle--lg">${avatarInnerHtml(u.username, null)}</div>`;
-  const bioHtml = u.bio
-    ? `<p class="perfil-bio">${escapeHtml(u.bio)}</p>`
-    : `<p class="perfil-bio perfil-bio--vazia">Sem bio.</p>`;
-
-  root.innerHTML = `
-    <div class="modal-overlay" id="modal-overlay">
-      <div class="modal-box modal-box--perfil">
-        <div class="info-grupo-topo">
-          ${fotoHtml}
-          <h3 class="modal-title info-grupo-nome">${escapeHtml(u.username)}</h3>
-          ${bioHtml}
-        </div>
-        <div class="modal-actions">
-          <button class="btn-ok btn-compacto" id="perfil-usuario-fechar" type="button">Fechar</button>
-        </div>
-      </div>
-    </div>`;
-  document.getElementById('perfil-usuario-fechar').onclick = () => { root.innerHTML = ''; };
-  document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') root.innerHTML = ''; };
-}
-
-// =========================================================
-//  BIO (salvar)
-// =========================================================
-const LIMITE_BIO = 20;
-
-async function salvarBio(texto) {
-  const resp = await fetch(`/api/users/${usuarioAtual.id}/bio`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bio: (texto || '').slice(0, LIMITE_BIO) })
-  });
-  const data = await resp.json();
-  if (!resp.ok) { mostrarAviso(data.error || 'Não foi possível salvar a bio.'); return; }
-  usuarioAtual.bio = data.bio;
-  localStorage.setItem('usuario', JSON.stringify(usuarioAtual));
-  mostrarAviso('Bio salva!', 'sucesso');
-}
