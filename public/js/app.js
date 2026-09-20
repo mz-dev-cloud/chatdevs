@@ -808,6 +808,7 @@ function entrarNoChat() {
 
   socket = io();
   socket.emit('join', { userId: usuarioAtual.id });
+  sincronizarContatos();
 
   socket.on('new_message', msg => {
     if (msg.chatId === chatAtualId) {
@@ -1059,7 +1060,7 @@ async function carregarStats() {
   }
 }
 
-// ---------- Contatos salvos (fica só no navegador, não no servidor) ----------
+// ---------- Contatos salvos (o servidor é a fonte da verdade; o navegador guarda só uma cópia) ----------
 function carregarContatos() {
   if (!usuarioAtual) return [];
   try { return JSON.parse(localStorage.getItem('contatos_' + usuarioAtual.id) || '[]'); }
@@ -1078,6 +1079,17 @@ function salvarContato(contato) {
 }
 function apagarContato(id) {
   salvarContatos(carregarContatos().filter(c => c.id !== id));
+}
+// Puxa do servidor os contatos da conta, pra valer em qualquer aparelho
+async function sincronizarContatos() {
+  if (!usuarioAtual) return;
+  try {
+    const resp = await fetch('/api/contacts?userId=' + encodeURIComponent(usuarioAtual.id));
+    if (!resp.ok) return;
+    const data = await resp.json();
+    salvarContatos(data.contatos || []);
+    if (chatAtualOutro) renderContatoBanner();
+  } catch (e) { /* sem internet: continua com a cópia local */ }
 }
 
 function abrirNovaConversa() {
@@ -2187,6 +2199,12 @@ async function abrirEditarPerfil() {
   const respPriv = await fetch(`/api/users/${usuarioAtual.id}/photo-privacy`);
   const priv = await respPriv.json();
 
+  let bioAtual = usuarioAtual.bio || '';
+  try {
+    const rp = await fetch(`/api/users/${usuarioAtual.id}/public?viewerId=${usuarioAtual.id}`);
+    if (rp.ok) bioAtual = (await rp.json()).bio || '';
+  } catch (e) {}
+
   const acoesFotoHtml = `
     <div class="info-grupo-acoes-foto">
       <button class="link-sutil" id="perfil-trocar-foto" type="button">Trocar foto</button>
@@ -2229,6 +2247,13 @@ async function abrirEditarPerfil() {
           ${acoesFotoHtml}
           <input type="file" id="perfil-foto-input" accept="image/*" style="display:none">
         </div>
+        <div class="config-grupo">
+          <span class="config-label">Bio</span>
+          <div class="convite-link-row">
+            <input class="modal-input" id="perfil-bio" type="text" maxlength="20" placeholder="Escreva algo sobre você" value="${escapeHtml(bioAtual)}">
+            <button class="btn-outline btn-compacto" id="perfil-bio-salvar" type="button">Salvar</button>
+          </div>
+        </div>
         ${privacidadeHtml}
         <div class="modal-actions">
           <button class="btn-ok btn-compacto" id="perfil-fechar" type="button">Fechar</button>
@@ -2238,6 +2263,28 @@ async function abrirEditarPerfil() {
 
   document.getElementById('perfil-fechar').onclick = () => { root.innerHTML = ''; };
   document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') root.innerHTML = ''; };
+  const inputBio = document.getElementById('perfil-bio');
+  const btnBio = document.getElementById('perfil-bio-salvar');
+  const salvarBio = async () => {
+    btnBio.disabled = true;
+    try {
+      const resp = await fetch(`/api/users/${usuarioAtual.id}/bio`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bio: inputBio.value.trim() })
+      });
+      const data = await resp.json();
+      if (!resp.ok) { mostrarAviso(data.error || 'Não foi possível salvar a bio.'); }
+      else {
+        usuarioAtual.bio = data.bio;
+        localStorage.setItem('usuario', JSON.stringify(usuarioAtual));
+        mostrarAviso('Bio salva!', 'sucesso');
+      }
+    } catch (e) { mostrarAviso('Erro de conexão. Tente de novo.'); }
+    btnBio.disabled = false;
+  };
+  btnBio.onclick = salvarBio;
+  inputBio.addEventListener('keydown', e => { if (e.key === 'Enter') salvarBio(); });
   document.getElementById('perfil-trocar-foto').onclick = () => document.getElementById('perfil-foto-input').click();
   document.getElementById('perfil-foto-input').onchange = e => {
     if (e.target.files[0]) trocarFotoPerfil(e.target.files[0]);

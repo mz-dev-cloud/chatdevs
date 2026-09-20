@@ -511,6 +511,23 @@ app.post('/api/contacts', (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Listar os contatos salvos da conta (vale em qualquer aparelho) ----------
+app.get('/api/contacts', (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ error: 'Informe o userId' });
+  const db = loadDB();
+  const contatos = db.contacts
+    .filter(c => c.ownerId === userId)
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    .map(c => {
+      const u = db.users.find(x => x.id === c.contactId);
+      if (!u) return null;
+      return { id: u.id, username: u.username, email: u.email, photoUrl: fotoParaViewer(db, u, userId) };
+    })
+    .filter(Boolean);
+  res.json({ contatos });
+});
+
 // ---------- Apagar contato de vez (não é só cosmético — some da regra de privacidade também) ----------
 app.post('/api/contacts/remove', (req, res) => {
   const { ownerId, contactId } = req.body;
