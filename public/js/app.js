@@ -2037,7 +2037,10 @@ function voltarHome() {
   esconderBadgePedidos();
   document.getElementById('chat-view').classList.add('oculto');
   document.getElementById('home-view').classList.remove('oculto');
-  mostrarListaMobile();
+  
+  // LINHA CORRIGIDA: Garante que o celular saia da conversa e volte para o painel inicial de Novidades
+  mostrarListaMobile(); 
+  
   renderizarListaChats();
 }
 

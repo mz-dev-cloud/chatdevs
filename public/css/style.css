@@ -1476,8 +1476,19 @@ body {
 }
 
 @media (max-width: 760px) {
-  .topbar {
+  /* Não esconde a topbar inteira, apenas os elementos visuais que você marcou */
+  #chat-screen.mostrar-main .topbar-brand,
+  #chat-screen.mostrar-main #wrap-avatar-topo,
+  .topbar-brand, 
+  #wrap-avatar-topo {
     display: none !important;
+  }
+  
+  /* Ajusta a altura da topbar para não ocupar espaço desnecessário */
+  .topbar {
+    height: auto !important;
+    padding: 5px 10px !important;
+    border-bottom: none !important;
   }
 }
 

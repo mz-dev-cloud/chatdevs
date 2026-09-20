@@ -122,7 +122,8 @@
       <div class="app-sidebar">
         <div class="dropdown-wrap search-row">
           <input id="busca-input" placeholder="Buscar conversa" oninput="carregarListaChats()">
-          <button class="search-options-btn" onclick="alternarDropdown('menu-busca')" aria-label="Filtros de busca">⋮</button>
+          <button class="search-options-btn" onclick="voltarHome()" title="Voltar ao início" style="margin-right: 2px;">🏠</button>
+<button class="search-options-btn" onclick="alternarDropdown('menu-busca')">⋮</button>
           <div id="menu-busca" class="dropdown-menu oculto dropdown-menu-busca">
             <div class="dropdown-item dropdown-clicavel" onclick="filtrarConversas('todas')">
               <span>Todas as conversas</span>
