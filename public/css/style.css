@@ -1019,8 +1019,11 @@ body {
   #chat-screen.mostrar-main .app-sidebar { display: none; }
   #chat-screen.mostrar-main .app-main { display: block; }
   #chat-screen.mostrar-main .topbar { display: none; }
+  #chat-screen.mostrar-main ~ .app-footer { display: none; }
+  #chat-screen.mostrar-main .search-options-btn svg { width: 18px; height: 18px; }
 
   .mobile-only { display: flex; }
+  .search-options-btn.mobile-only svg { width: 17px; height: 17px; display: block; }
 
   .btn-ir-conversas-mobile {
     position: fixed;

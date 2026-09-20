@@ -119,7 +119,13 @@
       <div class="app-sidebar">
         <div class="dropdown-wrap search-row">
           <input id="busca-input" placeholder="Buscar conversa" oninput="carregarListaChats()">
-          <button class="search-options-btn mobile-only" onclick="mostrarHomeMobile()" title="Voltar ao início" aria-label="Voltar ao início">🏠</button>
+          <button class="search-options-btn mobile-only" onclick="mostrarHomeMobile()" title="Voltar ao início" aria-label="Voltar ao início">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m3 10 9-7 9 7"/>
+              <path d="M5 9.5V21h14V9.5"/>
+              <path d="M9 21v-6h6v6"/>
+            </svg>
+          </button>
 <button class="search-options-btn" onclick="alternarDropdown('menu-busca')" aria-label="Opções da busca">⋮</button>
           <div id="menu-busca" class="dropdown-menu oculto dropdown-menu-busca">
             <div class="dropdown-item dropdown-clicavel" onclick="filtrarConversas('todas')">
