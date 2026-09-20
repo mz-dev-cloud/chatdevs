@@ -995,14 +995,10 @@ body {
    removendo a classe "mostrar-main" no #chat-screen (ver app.js). */
 @media (max-width: 760px) {
   html, body { overflow-x: hidden; }
-
   .screen { min-height: 100dvh; }
   .app-shell { height: 100dvh; }
-
   .auth-panel { width: 100%; max-width: 320px; }
-
   .topbar { padding: 0 14px; }
-
   .app-body { flex-direction: column; }
 
   .app-sidebar {
@@ -1014,27 +1010,40 @@ body {
   }
   .app-main { display: none; height: 100%; padding: 22px 16px; }
 
+  #chat-screen.mobile-home .app-sidebar { display: none; }
+  #chat-screen.mobile-home .app-main { display: block; }
+
+  #chat-screen:not(.mobile-home):not(.mostrar-main) .app-sidebar { display: flex; }
+  #chat-screen:not(.mobile-home):not(.mostrar-main) .app-main { display: none; }
+
   #chat-screen.mostrar-main .app-sidebar { display: none; }
   #chat-screen.mostrar-main .app-main { display: block; }
-  #chat-screen.mostrar-main #btn-inicio-mobile { display: none; }
-
-  /* Dentro de uma conversa (privada ou de grupo) no celular, some com a logo
-     e o ícone da conta no topo — sobra mais altura de tela pra ver as
-     mensagens, que é o que importa ali dentro. */
-  #chat-screen.mostrar-main .topbar-brand,
-  #chat-screen.mostrar-main #wrap-avatar-topo {
-    display: none;
-  }
-  #chat-screen.mostrar-main .topbar {
-    height: 42px;
-    padding: 0 10px;
-  }
+  #chat-screen.mostrar-main .topbar { display: none; }
 
   .mobile-only { display: flex; }
-  .btn-voltar-lista-mobile { margin-bottom: 18px; }
+
+  .btn-ir-conversas-mobile {
+    position: fixed;
+    right: 18px;
+    bottom: 72px;
+    z-index: 50;
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-contrast);
+    box-shadow: 0 8px 24px var(--shadow);
+    cursor: pointer;
+  }
+  .btn-ir-conversas-mobile:hover { filter: brightness(1.05); }
+  .btn-ir-conversas-mobile:focus-visible { outline: 2px solid var(--text); outline-offset: 2px; }
+  .btn-ir-conversas-mobile svg { width: 22px; height: 22px; }
 
   .msg { max-width: 82%; }
-
   .suporte-row { flex-direction: column; align-items: flex-start; }
   .app-footer {
     flex-wrap: wrap;
@@ -1043,28 +1052,6 @@ body {
     gap: 10px;
     padding: 14px 16px;
   }
-
-  .input-area { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
-
-  .dropdown-menu { max-width: calc(100vw - 32px); }
-
-  .modal-box { padding: 18px; }
-
-  /* Fonte um pouco maior no celular (as regras acima no arquivo usavam 10-13px,
-     que fica fino/pequeno demais numa tela de celular) */
-  .msg .conteudo { font-size: 15px; }
-  .msg .hora { font-size: 11px; }
-  .msg .quote-box .quote-nome,
-  .msg .reply-ref,
-  .msg-remetente-nome,
-  .reply-preview-nome,
-  .reply-preview-snippet { font-size: 13px; }
-  .item-chat .nome { font-size: 15px; }
-  .item-chat .preview { font-size: 13.5px; }
-  .chat-header { font-size: 16px; }
-  .input-area input { font-size: 15px; }
-  .config-label,
-  .privacidade-opcao { font-size: 14px; }
 }
 
 /* =========================================================
@@ -1476,19 +1463,14 @@ body {
 }
 
 @media (max-width: 760px) {
-  /* Não esconde a topbar inteira, apenas os elementos visuais que você marcou */
-  #chat-screen.mostrar-main .topbar-brand,
-  #chat-screen.mostrar-main #wrap-avatar-topo,
-  .topbar-brand, 
-  #wrap-avatar-topo {
-    display: none !important;
+  #chat-screen.mobile-home .topbar-brand,
+  #chat-screen.mobile-home #wrap-avatar-topo {
+    display: flex;
   }
-  
-  /* Ajusta a altura da topbar para não ocupar espaço desnecessário */
-  .topbar {
-    height: auto !important;
-    padding: 5px 10px !important;
-    border-bottom: none !important;
+  #chat-screen.mobile-home .topbar {
+    height: 56px;
+    padding: 0 14px;
+    border-bottom: 1px solid var(--border);
   }
 }
 

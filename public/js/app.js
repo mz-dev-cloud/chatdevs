@@ -23,17 +23,25 @@ function mostrarTela(nome) {
   document.getElementById(nome + '-screen').classList.remove('oculto');
 }
 
-// ---------- Navegação mobile (lista de conversas <-> conteúdo principal) ----------
-// No celular não cabe sidebar + área principal lado a lado, então elas viram
-// duas "telas" cheias controladas por essa classe (ver style.css). No PC essa
-// classe não tem efeito nenhum, o layout continua lado a lado como sempre foi.
+// ---------- Navegação mobile ----------
+function mostrarHomeMobile() {
+  const shell = document.getElementById('chat-screen');
+  if (!shell) return;
+  shell.classList.add('mobile-home');
+  shell.classList.remove('mostrar-main');
+}
+
 function mostrarPainelMobile() {
   const shell = document.getElementById('chat-screen');
-  if (shell) shell.classList.add('mostrar-main');
+  if (!shell) return;
+  shell.classList.remove('mobile-home');
+  shell.classList.add('mostrar-main');
 }
+
 function mostrarListaMobile() {
   const shell = document.getElementById('chat-screen');
-  if (shell) shell.classList.remove('mostrar-main');
+  if (!shell) return;
+  shell.classList.remove('mobile-home', 'mostrar-main');
 }
 
 // ---------- Inicialização ----------
@@ -876,6 +884,7 @@ function entrarNoChat() {
   carregarListaChats();
   carregarStats();
   voltarHome();
+  mostrarHomeMobile();
   processarConviteNaURL();
 }
 
@@ -2039,7 +2048,7 @@ function voltarHome() {
   document.getElementById('home-view').classList.remove('oculto');
   
   // LINHA CORRIGIDA: Garante que o celular saia da conversa e volte para o painel inicial de Novidades
-  mostrarListaMobile(); 
+  mostrarHomeMobile();
   
   renderizarListaChats();
 }

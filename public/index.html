@@ -84,9 +84,6 @@
         <span>ChatDevs</span>
       </div>
       <div class="topbar-right">
-        <button class="menu-dots-btn mobile-only" id="btn-inicio-mobile" onclick="mostrarPainelMobile()" title="Início" aria-label="Ver tela inicial">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9.5 12 3l9 6.5"/><path d="M5 10v10a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V10"/></svg>
-        </button>
         <div class="dropdown-wrap" id="wrap-avatar-topo">
           <div class="avatar-circle" id="avatar-topo" title="Trocar de conta" onclick="abrirTrocaConta()">
             <span id="avatar-inicial"></span>
@@ -122,8 +119,8 @@
       <div class="app-sidebar">
         <div class="dropdown-wrap search-row">
           <input id="busca-input" placeholder="Buscar conversa" oninput="carregarListaChats()">
-          <button class="search-options-btn" onclick="voltarHome()" title="Voltar ao início" style="margin-right: 2px;">🏠</button>
-<button class="search-options-btn" onclick="alternarDropdown('menu-busca')">⋮</button>
+          <button class="search-options-btn mobile-only" onclick="mostrarHomeMobile()" title="Voltar ao início" aria-label="Voltar ao início">🏠</button>
+<button class="search-options-btn" onclick="alternarDropdown('menu-busca')" aria-label="Opções da busca">⋮</button>
           <div id="menu-busca" class="dropdown-menu oculto dropdown-menu-busca">
             <div class="dropdown-item dropdown-clicavel" onclick="filtrarConversas('todas')">
               <span>Todas as conversas</span>
@@ -152,7 +149,12 @@
         <!-- Home (aparece quando nenhuma conversa está aberta) -->
         <div id="home-view" class="home-inner">
 
-          <button class="btn-link mobile-only btn-voltar-lista-mobile" onclick="mostrarListaMobile()">← Conversas</button>
+          <button class="btn-ir-conversas-mobile mobile-only" onclick="mostrarListaMobile()" title="Ir para conversas" aria-label="Ir para conversas">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 11.5a8.38 8.38 0 0 1-9 8.5 9.3 9.3 0 0 1-4-.9L3 21l1.9-4.7A8.2 8.2 0 0 1 3 11.5 8.5 8.5 0 0 1 12 3a8.5 8.5 0 0 1 9 8.5Z"/>
+              <path d="M8 11h8M8 15h5"/>
+            </svg>
+          </button>
 
           <div class="home-section">
             <h2>Novidades</h2>
