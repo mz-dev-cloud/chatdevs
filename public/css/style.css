@@ -1017,9 +1017,33 @@ body {
   #chat-screen:not(.mobile-home):not(.mostrar-main) .app-main { display: none; }
 
   #chat-screen.mostrar-main .app-sidebar { display: none; }
-  #chat-screen.mostrar-main .app-main { display: block; }
-  #chat-screen.mostrar-main .topbar { display: none; }
-  #chat-screen.mostrar-main ~ .app-footer { display: none; }
+
+  /* Dentro de um grupo/PV: a conversa ocupa toda a altura disponível.
+     O topo e o rodapé deixam de reservar espaço físico. */
+  #chat-screen.mostrar-main .topbar,
+  #chat-screen.mostrar-main .app-footer {
+    display: none !important;
+  }
+
+  #chat-screen.mostrar-main .app-body {
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+  }
+
+  #chat-screen.mostrar-main .app-main {
+    display: block;
+    height: 100%;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  #chat-screen.mostrar-main #chat-view {
+    height: 100%;
+    min-height: 0;
+  }
+
   #chat-screen.mostrar-main .search-options-btn svg { width: 18px; height: 18px; }
 
   .mobile-only { display: flex; }
