@@ -12,10 +12,18 @@ require('dotenv').config();
 const { loadDB, saveDB, init } = require('./db');
 
 // ── Supabase ────────────────────────────────────────────────────────────────
+const OPCOES_SEM_SESSAO = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } };
+// cliente "admin": nunca faz login de usuário, então sempre age como service_role
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY
+  process.env.SUPABASE_SERVICE_KEY,
+  OPCOES_SEM_SESSAO
 );
+// cliente descartável pra login/cadastro: o login guarda sessão dentro do cliente,
+// e isso faria o cliente admin passar a agir como aquele usuário (e bater no RLS)
+function clienteSemSessao() {
+  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, OPCOES_SEM_SESSAO);
+}
 console.log('[auth] Supabase configurado:', process.env.SUPABASE_URL);
 
 // ── Cloudinary ──────────────────────────────────────────────────────────────
@@ -245,7 +253,7 @@ app.post('/api/register', async (req, res) => {
   }
 
   // cria no Supabase Auth via signUp — ele envia o e-mail de confirmação sozinho
-  const { data, error } = await supabase.auth.signUp({
+  const { data, error } = await clienteSemSessao().auth.signUp({
     email,
     password,
     options: {
@@ -288,11 +296,12 @@ app.post('/api/login', async (req, res) => {
   if (!emailOrUsername.includes('@')) {
     const u = db.users.find(u => u.username.toLowerCase() === emailOrUsername.toLowerCase());
     if (!u) return res.status(404).json({ error: 'Usuário não encontrado' });
-    email = u.email;
+    const { data: au } = await supabase.auth.admin.getUserById(u.id);
+    email = (au && au.user && au.user.email) || u.email;
   }
 
   // autentica pelo Supabase
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+  const { data, error } = await clienteSemSessao().auth.signInWithPassword({ email, password });
   if (error) {
     if (error.message.includes('Email not confirmed')) {
       const u = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
@@ -302,8 +311,10 @@ app.post('/api/login', async (req, res) => {
   }
 
   // pega o perfil do MongoDB
-  const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+  const user = db.users.find(u => u.id === data.user.id)
+    || db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
   if (!user) return res.status(404).json({ error: 'Perfil não encontrado' });
+  if (data.user.email && user.email !== data.user.email) { user.email = data.user.email; saveDB(db); }
 
   res.json({ user: publicUser(user), token: data.session.access_token });
 });
@@ -364,6 +375,89 @@ app.post('/api/reset-password', async (req, res) => {
       : 'Não foi possível salvar a senha. Tente de novo.';
     return res.status(400).json({ error: msg });
   }
+  res.json({ ok: true });
+});
+
+// ---------- Trocar e-mail (manda link de confirmação pro e-mail novo) ----------
+app.post('/api/change-email', async (req, res) => {
+  const { userId, novoEmail, senha } = req.body;
+  const db = loadDB();
+  const user = db.users.find(u => u.id === userId);
+  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+  const novo = (novoEmail || '').trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(novo)) return res.status(400).json({ error: 'Digite um e-mail válido.' });
+  if (!senha) return res.status(400).json({ error: 'Digite sua senha atual.' });
+  if (novo === user.email.toLowerCase()) return res.status(400).json({ error: 'Esse já é o seu e-mail atual.' });
+  if (db.users.some(u => u.email.toLowerCase() === novo)) return res.status(409).json({ error: 'Esse e-mail já está em uso.' });
+
+  // confere a senha atual antes de mexer no e-mail
+  const cli = clienteSemSessao();
+  const { error: erroLogin } = await cli.auth.signInWithPassword({ email: user.email, password: senha });
+  if (erroLogin) return res.status(401).json({ error: 'Senha incorreta.' });
+
+  const { error } = await cli.auth.updateUser(
+    { email: novo },
+    { emailRedirectTo: process.env.SITE_URL || 'https://chatdevs-production.up.railway.app' }
+  );
+  if (error) {
+    if (/rate|second|limit/i.test(error.message)) {
+      return res.status(429).json({ error: 'Aguarde 1 minuto antes de pedir de novo.' });
+    }
+    return res.status(400).json({ error: 'Não foi possível enviar o e-mail de confirmação agora.' });
+  }
+  res.json({ ok: true });
+});
+
+// ---------- Depois de confirmar o e-mail novo, atualiza o perfil daqui ----------
+app.post('/api/sync-email', async (req, res) => {
+  const { accessToken } = req.body;
+  if (!accessToken) return res.status(400).json({ error: 'Dados incompletos.' });
+
+  const { data, error } = await supabase.auth.getUser(accessToken);
+  if (error || !data || !data.user) return res.status(401).json({ error: 'Link inválido ou expirado.' });
+
+  const db = loadDB();
+  const user = db.users.find(u => u.id === data.user.id);
+  if (!user) return res.status(404).json({ error: 'Perfil não encontrado.' });
+
+  if (user.email !== data.user.email) { user.email = data.user.email; saveDB(db); }
+  res.json({ ok: true, id: user.id, email: user.email });
+});
+
+// ---------- Tickets (bug / elogio / sugestão) → tabela "tickets" no Supabase ----------
+const ticketsRecentes = new Map(); // userId -> [timestamps] (limite de 5 por hora)
+app.post('/api/tickets', async (req, res) => {
+  const { userId, tipo, mensagem, pagina } = req.body;
+  const db = loadDB();
+  const user = db.users.find(u => u.id === userId);
+  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+
+  if (!['bug', 'elogio', 'sugestao'].includes(tipo)) return res.status(400).json({ error: 'Escolha o tipo do ticket.' });
+  const texto = (mensagem || '').trim();
+  if (texto.length < 5) return res.status(400).json({ error: 'Escreva pelo menos 5 caracteres.' });
+  if (texto.length > 1500) return res.status(400).json({ error: 'Máximo de 1500 caracteres.' });
+
+  const agora = Date.now();
+  const recentes = (ticketsRecentes.get(userId) || []).filter(t => agora - t < 60 * 60 * 1000);
+  if (recentes.length >= 5) return res.status(429).json({ error: 'Você já enviou 5 tickets na última hora. Tente mais tarde.' });
+
+  const { error } = await supabase.from('tickets').insert({
+    user_id: user.id,
+    username: user.username,
+    email: user.email,
+    tipo,
+    mensagem: texto,
+    pagina: (pagina || '').toString().slice(0, 200) || null,
+    user_agent: (req.headers['user-agent'] || '').slice(0, 300) || null
+  });
+  if (error) {
+    console.error('[tickets] erro ao salvar:', error.message);
+    return res.status(500).json({ error: 'Não foi possível enviar agora. Tente de novo.' });
+  }
+
+  recentes.push(agora);
+  ticketsRecentes.set(userId, recentes);
   res.json({ ok: true });
 });
 

@@ -39,9 +39,10 @@ function mostrarListaMobile() {
 // ---------- Inicialização ----------
 // Quando a pessoa clica no link do e-mail, o Supabase devolve ela pro site com o
 // resultado na parte "#..." da URL. Aqui a gente lê isso, limpa a URL e avisa.
+let tokenTrocaEmail = null; // token que vem no link de confirmação do e-mail novo
 function tratarRetornoDoEmail() {
   const hash = location.hash || '';
-  if (!/access_token|error/.test(hash)) return null;
+  if (!/access_token|error|message/.test(hash)) return null;
   const p = new URLSearchParams(hash.replace(/^#/, ''));
   if (p.get('type') === 'recovery' && p.get('access_token')) {
     location.replace('/reset-password' + hash);
@@ -49,6 +50,11 @@ function tratarRetornoDoEmail() {
   }
   try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
   if (p.get('error') || p.get('error_code')) return 'expirado';
+  if (p.get('type') === 'email_change' && p.get('access_token')) {
+    tokenTrocaEmail = p.get('access_token');
+    return 'email_trocado';
+  }
+  if (p.get('message') && !p.get('access_token')) return 'parcial';
   return 'confirmado';
 }
 
@@ -65,6 +71,8 @@ window.onload = () => {
       if (retorno === 'confirmado') mostrarAviso('E-mail confirmado! Agora é só entrar.', 'sucesso');
       else if (retorno === 'expirado') mostrarAviso('Esse link já foi usado ou expirou. Se você já confirmou, é só entrar.');
     }
+    if (retorno === 'email_trocado') sincronizarEmailTrocado();
+    else if (retorno === 'parcial') mostrarAviso('Link aceito! Falta confirmar também no outro e-mail (o antigo).', 'sucesso');
   }, 1700); // tempo da barra de progresso
 };
 
@@ -277,6 +285,169 @@ function esqueceuSenha() {
   };
 }
 
+// ---------- Trocar e-mail ----------
+function abrirTrocarEmail() {
+  if (!usuarioAtual) return;
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal-box">
+        <h3 class="modal-title">Trocar e-mail</h3>
+        <p class="modal-texto">Seu e-mail atual é <b>${escapeHtml(usuarioAtual.email || '')}</b>. Enviaremos um link de confirmação para o novo. Ele só muda depois que você clicar no link.</p>
+        <input class="modal-input" id="te-novo" type="email" placeholder="Novo e-mail" autocomplete="email">
+        <input class="modal-input" id="te-senha" type="password" placeholder="Sua senha atual" autocomplete="current-password" style="margin-top:8px">
+        <p class="modal-erro" id="te-erro"></p>
+        <div class="modal-actions">
+          <button class="btn-outline btn-compacto" id="te-cancelar" type="button">Cancelar</button>
+          <button class="btn-ok btn-compacto" id="te-enviar" type="button">Enviar link</button>
+        </div>
+      </div>
+    </div>`;
+
+  const fechar = () => { root.innerHTML = ''; };
+  document.getElementById('te-cancelar').onclick = fechar;
+  document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') fechar(); };
+  document.getElementById('te-novo').focus();
+  document.getElementById('te-senha').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('te-enviar').click(); });
+
+  document.getElementById('te-enviar').onclick = async () => {
+    const novoEmail = document.getElementById('te-novo').value.trim();
+    const senha = document.getElementById('te-senha').value;
+    const erroEl = document.getElementById('te-erro');
+    erroEl.textContent = '';
+    if (!novoEmail || !senha) { erroEl.textContent = 'Preencha o novo e-mail e a senha.'; return; }
+
+    const btn = document.getElementById('te-enviar');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+    try {
+      const resp = await fetch('/api/change-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: usuarioAtual.id, novoEmail, senha })
+      });
+      const data = await resp.json();
+      btn.disabled = false; btn.textContent = 'Enviar link';
+      if (!resp.ok) { erroEl.textContent = data.error || 'Não foi possível enviar agora.'; return; }
+      mostrarTrocaEmailEnviada(novoEmail);
+    } catch (e) {
+      btn.disabled = false; btn.textContent = 'Enviar link';
+      erroEl.textContent = 'Erro de conexão. Tente de novo.';
+    }
+  };
+}
+
+function mostrarTrocaEmailEnviada(novoEmail) {
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal-box">
+        <h3 class="modal-title">✉️ Confirme o novo e-mail</h3>
+        <p class="modal-texto">Enviamos um link para <b>${escapeHtml(novoEmail)}</b>. Abra o e-mail e clique em <b>Confirmar novo e-mail</b>.<br>Se também chegar um aviso no e-mail antigo, confirme nele também.</p>
+        ${avisoSpamHtml()}
+        <div class="modal-actions" style="margin-top:16px">
+          <button class="btn-ok btn-compacto" id="te-ok" type="button">Entendi</button>
+        </div>
+      </div>
+    </div>`;
+  const fechar = () => { root.innerHTML = ''; };
+  document.getElementById('te-ok').onclick = fechar;
+  document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') fechar(); };
+}
+
+// Depois que a pessoa clica no link do e-mail novo, atualiza o e-mail aqui no site
+async function sincronizarEmailTrocado() {
+  const token = tokenTrocaEmail;
+  tokenTrocaEmail = null;
+  if (!token) return;
+  try {
+    const resp = await fetch('/api/sync-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessToken: token })
+    });
+    const data = await resp.json();
+    if (!resp.ok) { mostrarAviso(data.error || 'Não foi possível atualizar o e-mail.'); return; }
+
+    try {
+      const salvo = JSON.parse(localStorage.getItem('usuario') || 'null');
+      if (salvo && salvo.id === data.id) {
+        salvo.email = data.email;
+        localStorage.setItem('usuario', JSON.stringify(salvo));
+        if (usuarioAtual && usuarioAtual.id === data.id) usuarioAtual.email = data.email;
+      }
+      const contas = carregarContas().map(c => c.id === data.id ? Object.assign({}, c, { email: data.email }) : c);
+      localStorage.setItem('contas', JSON.stringify(contas));
+    } catch (e) {}
+    mostrarAviso('E-mail alterado para ' + data.email + '!', 'sucesso');
+  } catch (e) {
+    mostrarAviso('Erro de conexão ao atualizar o e-mail.');
+  }
+}
+
+// ---------- Tickets (bug / elogio / sugestão) ----------
+function abrirTicket() {
+  if (!usuarioAtual) return;
+  const menu = document.getElementById('menu-conta');
+  if (menu) menu.classList.add('oculto');
+
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal-box">
+        <h3 class="modal-title">Enviar ticket</h3>
+        <p class="modal-texto">Achou um bug, quer elogiar ou tem uma ideia? Conta pra gente.</p>
+        <select class="modal-input" id="tk-tipo">
+          <option value="bug">🐞 Bug ou erro</option>
+          <option value="elogio">💛 Elogio</option>
+          <option value="sugestao">💡 Sugestão</option>
+        </select>
+        <textarea class="modal-input" id="tk-msg" rows="5" maxlength="1500" placeholder="Escreva aqui. Se for um bug, diga o que você estava fazendo quando aconteceu." style="margin-top:8px"></textarea>
+        <p class="modal-texto" id="tk-contador" style="text-align:right;margin:2px 0 0;font-size:12px;opacity:.7">0/1500</p>
+        <p class="modal-erro" id="tk-erro"></p>
+        <div class="modal-actions">
+          <button class="btn-outline btn-compacto" id="tk-cancelar" type="button">Cancelar</button>
+          <button class="btn-ok btn-compacto" id="tk-enviar" type="button">Enviar</button>
+        </div>
+      </div>
+    </div>`;
+
+  const fechar = () => { root.innerHTML = ''; };
+  document.getElementById('tk-cancelar').onclick = fechar;
+  document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') fechar(); };
+
+  const msg = document.getElementById('tk-msg');
+  msg.focus();
+  msg.addEventListener('input', () => {
+    document.getElementById('tk-contador').textContent = msg.value.length + '/1500';
+  });
+
+  document.getElementById('tk-enviar').onclick = async () => {
+    const tipo = document.getElementById('tk-tipo').value;
+    const mensagem = msg.value.trim();
+    const erroEl = document.getElementById('tk-erro');
+    erroEl.textContent = '';
+    if (mensagem.length < 5) { erroEl.textContent = 'Escreva pelo menos 5 caracteres.'; return; }
+
+    const btn = document.getElementById('tk-enviar');
+    btn.disabled = true; btn.textContent = 'Enviando...';
+    try {
+      const resp = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: usuarioAtual.id, tipo, mensagem, pagina: location.pathname })
+      });
+      const data = await resp.json();
+      btn.disabled = false; btn.textContent = 'Enviar';
+      if (!resp.ok) { erroEl.textContent = data.error || 'Não foi possível enviar agora.'; return; }
+      fechar();
+      mostrarAviso('Ticket enviado! Obrigado 💛', 'sucesso');
+    } catch (e) {
+      btn.disabled = false; btn.textContent = 'Enviar';
+      erroEl.textContent = 'Erro de conexão. Tente de novo.';
+    }
+  };
+}
+
 // ---------- Avisos (substituem os alert() feios) ----------
 function mostrarAviso(mensagem, tipo) {
   const el = document.createElement('div');
@@ -470,6 +641,7 @@ function renderConfigModal() {
         <div class="config-grupo">
           <span class="config-label">Conta</span>
           <button class="btn-outline btn-compacto" onclick="redefinirSenhaNasConfigs()" type="button" style="margin-top:4px">🔑 Trocar senha</button>
+          <button class="btn-outline btn-compacto" onclick="abrirTrocarEmail()" type="button" style="margin-top:4px">✉️ Trocar e-mail</button>
         </div>
 
         <div class="modal-actions">
