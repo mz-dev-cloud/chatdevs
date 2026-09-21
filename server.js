@@ -2,36 +2,11 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const multer = require('multer');
+const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
-const { createClient } = require('@supabase/supabase-js');
-const cloudinary = require('cloudinary').v2;
-const { CloudinaryStorage } = require('multer-storage-cloudinary');
-require('dotenv').config();
-const { loadDB, saveDB, init } = require('./db');
-
-// ── Supabase ────────────────────────────────────────────────────────────────
-const OPCOES_SEM_SESSAO = { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } };
-// cliente "admin": nunca faz login de usuário, então sempre age como service_role
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_KEY,
-  OPCOES_SEM_SESSAO
-);
-// cliente descartável pra login/cadastro: o login guarda sessão dentro do cliente,
-// e isso faria o cliente admin passar a agir como aquele usuário (e bater no RLS)
-function clienteSemSessao() {
-  return createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_KEY, OPCOES_SEM_SESSAO);
-}
-console.log('[auth] Supabase configurado:', process.env.SUPABASE_URL);
-
-// ── Cloudinary ──────────────────────────────────────────────────────────────
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key:    process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+const { loadDB, saveDB } = require('./db');
 
 const app = express();
 const server = http.createServer(app);
@@ -43,23 +18,29 @@ const LIMITE_EDICAO_MS = 60 * 1000; // 1 minuto
 const VIDA_MIDIA_MS = 12 * 60 * 60 * 1000; // 12 horas
 
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-// uploads servidos direto do Cloudinary
 
-// ---------- Upload de mídia → Cloudinary ----------
-const cloudStorage = new CloudinaryStorage({
-  cloudinary,
-  params: async (req, file) => ({
-    folder: 'chatdevs',
-    resource_type: 'auto',
-    public_id: uuidv4(),
-  }),
+// ---------- Painel admin (arquivo estático protegido) ----------
+app.get('/admin', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
-const upload = multer({ storage: cloudStorage, limits: { fileSize: 25 * 1024 * 1024 } });
+app.use(express.static(path.join(__dirname, 'public')));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// ---------- Upload de mídia (áudio/vídeo) ----------
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, path.join(__dirname, 'uploads')),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname) || '';
+      cb(null, uuidv4() + ext);
+    }
+  }),
+  limits: { fileSize: 25 * 1024 * 1024 } // 25MB
+});
 
 app.post('/api/upload', upload.single('file'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
-  res.json({ url: req.file.path, filename: req.file.filename });
+  res.json({ url: '/uploads/' + req.file.filename, filename: req.file.filename });
 });
 
 // ---------- Helpers ----------
@@ -70,7 +51,7 @@ function getClientIp(req) {
 }
 
 function publicUser(u) {
-  return { id: u.id, username: u.username, email: u.email, photoUrl: u.photoUrl || null, bio: u.bio || '' };
+  return { id: u.id, username: u.username, email: u.email, photoUrl: u.photoUrl || null };
 }
 
 function findUserByEmailOrUsername(db, query) {
@@ -228,54 +209,28 @@ app.post('/api/register', async (req, res) => {
   if (!username || !email || !password) {
     return res.status(400).json({ error: 'Preencha usuário, email e senha' });
   }
-
   const db = loadDB();
   const ip = getClientIp(req);
 
-  // limpa cadastros "órfãos": existem no Mongo mas não existem mais no Supabase Auth
-  for (const u of db.users.slice()) {
-    if (u.username.toLowerCase() === username.toLowerCase() || u.email.toLowerCase() === email.toLowerCase()) {
-      const { data: existe } = await supabase.auth.admin.getUserById(u.id);
-      if (!existe || !existe.user) {
-        db.users = db.users.filter(x => x.id !== u.id);
-      }
-    }
+  const jaExiste = db.users.some(
+    u => u.email.toLowerCase() === email.toLowerCase() ||
+         u.username.toLowerCase() === username.toLowerCase()
+  );
+  if (jaExiste) {
+    return res.status(409).json({ error: 'Email ou usuário já cadastrado' });
   }
 
-  // checa username duplicado no MongoDB
-  const usernameExiste = db.users.some(u => u.username.toLowerCase() === username.toLowerCase());
-  if (usernameExiste) return res.status(409).json({ error: 'Nome de usuário já cadastrado' });
-
-  // limite por IP
   const contasNesseIp = db.ipCounts[ip] || 0;
   if (contasNesseIp >= MAX_CONTAS_POR_IP) {
     return res.status(403).json({ error: 'Limite de 3 contas por IP atingido' });
   }
 
-  // cria no Supabase Auth via signUp — ele envia o e-mail de confirmação sozinho
-  const { data, error } = await clienteSemSessao().auth.signUp({
-    email,
-    password,
-    options: {
-      data: { username },
-      emailRedirectTo: process.env.SITE_URL || 'https://chatdevs-production.up.railway.app'
-    }
-  });
-
-  if (error) {
-    if (error.message.toLowerCase().includes('already')) return res.status(409).json({ error: 'Email já cadastrado' });
-    return res.status(400).json({ error: error.message });
-  }
-  // e-mail já confirmado por outra conta: o Supabase devolve usuário "falso" sem identities
-  if (!data.user || (data.user.identities && data.user.identities.length === 0)) {
-    return res.status(409).json({ error: 'Email já cadastrado' });
-  }
-
-  // salva perfil no MongoDB com o id do Supabase
+  const passwordHash = await bcrypt.hash(password, 10);
   const user = {
-    id: data.user.id, // usa o uuid do Supabase
+    id: uuidv4(),
     username,
     email,
+    passwordHash,
     createdIp: ip,
     createdAt: Date.now()
   };
@@ -283,194 +238,24 @@ app.post('/api/register', async (req, res) => {
   db.ipCounts[ip] = contasNesseIp + 1;
   saveDB(db);
 
-  res.json({ user: publicUser(user), verificacaoPendente: true });
+  res.json({ user: publicUser(user) });
 });
 
 // ---------- Login ----------
 app.post('/api/login', async (req, res) => {
   const { emailOrUsername, password } = req.body;
   const db = loadDB();
-
-  // resolve username → email se necessário
-  let email = emailOrUsername;
-  if (!emailOrUsername.includes('@')) {
-    const u = db.users.find(u => u.username.toLowerCase() === emailOrUsername.toLowerCase());
-    if (!u) return res.status(404).json({ error: 'Usuário não encontrado' });
-    const { data: au } = await supabase.auth.admin.getUserById(u.id);
-    email = (au && au.user && au.user.email) || u.email;
-  }
-
-  // autentica pelo Supabase
-  const { data, error } = await clienteSemSessao().auth.signInWithPassword({ email, password });
-  if (error) {
-    if (error.message.includes('Email not confirmed')) {
-      const u = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-      return res.status(403).json({ error: 'Confirme seu e-mail antes de entrar.', verificacaoPendente: true, userId: u?.id, email: u?.email });
-    }
-    return res.status(401).json({ error: 'Email ou senha incorretos' });
-  }
-
-  // pega o perfil do MongoDB
-  const user = db.users.find(u => u.id === data.user.id)
-    || db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-  if (!user) return res.status(404).json({ error: 'Perfil não encontrado' });
-  if (data.user.email && user.email !== data.user.email) { user.email = data.user.email; saveDB(db); }
-
-  res.json({ user: publicUser(user), token: data.session.access_token });
-});
-
-// ---------- Verificar email (reenviar link) ----------
-app.post('/api/resend-verification', async (req, res) => {
-  const { userId } = req.body;
-  const db = loadDB();
-  const user = db.users.find(u => u.id === userId);
-  if (!user) return res.json({ ok: true });
-
-  const { error } = await supabase.auth.resend({
-    type: 'signup',
-    email: user.email,
-    options: { emailRedirectTo: process.env.SITE_URL || 'https://chatdevs-production.up.railway.app' }
-  });
-  if (error) return res.status(429).json({ error: 'Não foi possível reenviar agora. Aguarde 1 minuto e tente de novo.' });
-  res.json({ ok: true });
-});
-
-// ---------- Esqueci a senha ----------
-app.post('/api/forgot-password', async (req, res) => {
-  const { email } = req.body;
-  if (!email) return res.json({ ok: true });
-
-  const db = loadDB();
-  const user = db.users.find(u => u.email.toLowerCase() === email.toLowerCase());
-  if (!user) return res.json({ ok: true }); // não revela se existe
-
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: (process.env.SITE_URL || 'https://chatdevs-production.up.railway.app') + '/reset-password'
-  });
-
-  if (error) return res.status(429).json({ ok: false, error: 'Não foi possível enviar agora. Aguarde 1 minuto e tente de novo.' });
-  res.json({ ok: true });
-});
-
-// ---------- Página de nova senha (o link do e-mail abre aqui) ----------
-app.get('/reset-password', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'reset-password.html'));
-});
-
-// ---------- Salvar a nova senha (usa o token que veio no link do e-mail) ----------
-app.post('/api/reset-password', async (req, res) => {
-  const { accessToken, novaSenha } = req.body;
-  if (!accessToken || !novaSenha) return res.status(400).json({ error: 'Dados incompletos.' });
-  if (novaSenha.length < 6) return res.status(400).json({ error: 'Senha muito curta (mínimo 6 caracteres).' });
-
-  const { data, error } = await supabase.auth.getUser(accessToken);
-  if (error || !data || !data.user) {
-    return res.status(401).json({ error: 'Link inválido ou expirado. Peça um novo em "Esqueceu a senha?".' });
-  }
-
-  const { error: erroSenha } = await supabase.auth.admin.updateUserById(data.user.id, { password: novaSenha });
-  if (erroSenha) {
-    const msg = /different|same/i.test(erroSenha.message)
-      ? 'A nova senha precisa ser diferente da atual.'
-      : 'Não foi possível salvar a senha. Tente de novo.';
-    return res.status(400).json({ error: msg });
-  }
-  res.json({ ok: true });
-});
-
-// ---------- Trocar e-mail (manda link de confirmação pro e-mail novo) ----------
-app.post('/api/change-email', async (req, res) => {
-  const { userId, novoEmail, senha } = req.body;
-  const db = loadDB();
-  const user = db.users.find(u => u.id === userId);
+  const user = findUserByEmailOrUsername(db, emailOrUsername || '');
   if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
 
-  const novo = (novoEmail || '').trim().toLowerCase();
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(novo)) return res.status(400).json({ error: 'Digite um e-mail válido.' });
-  if (!senha) return res.status(400).json({ error: 'Digite sua senha atual.' });
-  if (novo === user.email.toLowerCase()) return res.status(400).json({ error: 'Esse já é o seu e-mail atual.' });
-  if (db.users.some(u => u.email.toLowerCase() === novo)) return res.status(409).json({ error: 'Esse e-mail já está em uso.' });
+  const ok = await bcrypt.compare(password, user.passwordHash);
+  if (!ok) return res.status(401).json({ error: 'Senha incorreta' });
 
-  // confere a senha atual antes de mexer no e-mail
-  const cli = clienteSemSessao();
-  const { error: erroLogin } = await cli.auth.signInWithPassword({ email: user.email, password: senha });
-  if (erroLogin) return res.status(401).json({ error: 'Senha incorreta.' });
-
-  const { error } = await cli.auth.updateUser(
-    { email: novo },
-    { emailRedirectTo: process.env.SITE_URL || 'https://chatdevs-production.up.railway.app' }
-  );
-  if (error) {
-    if (/rate|second|limit/i.test(error.message)) {
-      return res.status(429).json({ error: 'Aguarde 1 minuto antes de pedir de novo.' });
-    }
-    return res.status(400).json({ error: 'Não foi possível enviar o e-mail de confirmação agora.' });
-  }
-  res.json({ ok: true });
-});
-
-// ---------- Depois de confirmar o e-mail novo, atualiza o perfil daqui ----------
-app.post('/api/sync-email', async (req, res) => {
-  const { accessToken } = req.body;
-  if (!accessToken) return res.status(400).json({ error: 'Dados incompletos.' });
-
-  const { data, error } = await supabase.auth.getUser(accessToken);
-  if (error || !data || !data.user) return res.status(401).json({ error: 'Link inválido ou expirado.' });
-
-  const db = loadDB();
-  const user = db.users.find(u => u.id === data.user.id);
-  if (!user) return res.status(404).json({ error: 'Perfil não encontrado.' });
-
-  if (user.email !== data.user.email) { user.email = data.user.email; saveDB(db); }
-  res.json({ ok: true, id: user.id, email: user.email });
-});
-
-// ---------- Tickets (bug / elogio / sugestão) → tabela "tickets" no Supabase ----------
-const ticketsRecentes = new Map(); // userId -> [timestamps] (limite de 5 por hora)
-app.post('/api/tickets', async (req, res) => {
-  const { userId, tipo, mensagem, pagina } = req.body;
-  const db = loadDB();
-  const user = db.users.find(u => u.id === userId);
-  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
-
-  if (!['bug', 'elogio', 'sugestao'].includes(tipo)) return res.status(400).json({ error: 'Escolha o tipo do ticket.' });
-  const texto = (mensagem || '').trim();
-  if (texto.length < 5) return res.status(400).json({ error: 'Escreva pelo menos 5 caracteres.' });
-  if (texto.length > 1500) return res.status(400).json({ error: 'Máximo de 1500 caracteres.' });
-
-  const agora = Date.now();
-  const recentes = (ticketsRecentes.get(userId) || []).filter(t => agora - t < 60 * 60 * 1000);
-  if (recentes.length >= 5) return res.status(429).json({ error: 'Você já enviou 5 tickets na última hora. Tente mais tarde.' });
-
-  const { error } = await supabase.from('tickets').insert({
-    user_id: user.id,
-    username: user.username,
-    email: user.email,
-    tipo,
-    mensagem: texto,
-    pagina: (pagina || '').toString().slice(0, 200) || null,
-    user_agent: (req.headers['user-agent'] || '').slice(0, 300) || null
-  });
-  if (error) {
-    console.error('[tickets] erro ao salvar:', error.message);
-    return res.status(500).json({ error: 'Não foi possível enviar agora. Tente de novo.' });
+  if (user.bloqueadoAdmin) {
+    return res.status(403).json({ error: 'Sua conta foi suspensa. Entre em contato com o suporte.' });
   }
 
-  recentes.push(agora);
-  ticketsRecentes.set(userId, recentes);
-  res.json({ ok: true });
-});
-
-// ---------- Salvar bio ----------
-app.post('/api/users/:userId/bio', (req, res) => {
-  const { userId } = req.params;
-  const { bio } = req.body;
-  const db = loadDB();
-  const user = db.users.find(u => u.id === userId);
-  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
-  user.bio = (bio || '').trim().slice(0, 20);
-  saveDB(db);
-  res.json({ ok: true, bio: user.bio });
+  res.json({ user: publicUser(user) });
 });
 
 // ---------- Trocar ou remover a própria foto de perfil ----------
@@ -511,23 +296,6 @@ app.post('/api/contacts', (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- Listar os contatos salvos da conta (vale em qualquer aparelho) ----------
-app.get('/api/contacts', (req, res) => {
-  const { userId } = req.query;
-  if (!userId) return res.status(400).json({ error: 'Informe o userId' });
-  const db = loadDB();
-  const contatos = db.contacts
-    .filter(c => c.ownerId === userId)
-    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
-    .map(c => {
-      const u = db.users.find(x => x.id === c.contactId);
-      if (!u) return null;
-      return { id: u.id, username: u.username, email: u.email, photoUrl: fotoParaViewer(db, u, userId) };
-    })
-    .filter(Boolean);
-  res.json({ contatos });
-});
-
 // ---------- Apagar contato de vez (não é só cosmético — some da regra de privacidade também) ----------
 app.post('/api/contacts/remove', (req, res) => {
   const { ownerId, contactId } = req.body;
@@ -550,7 +318,6 @@ app.get('/api/users/:userId/public', (req, res) => {
   res.json({
     id: user.id,
     username: user.username,
-    bio: user.bio || '',
     photoUrl: fotoParaViewer(db, user, viewerId)
   });
 });
@@ -1549,30 +1316,196 @@ io.on('connection', socket => {
 });
 
 // ---------- Limpeza automática de mídia com mais de 12h ----------
-async function limparMidiaAntiga() {
+function limparMidiaAntiga() {
   const db = loadDB();
-  if (!db) return;
   let mudou = false;
-  for (const m of db.messages) {
+  db.messages.forEach(m => {
     if (m.mediaUrl && m.mediaCreatedAt && Date.now() - m.mediaCreatedAt > VIDA_MIDIA_MS) {
-      try {
-        const partes = m.mediaUrl.split('/');
-        const publicId = 'chatdevs/' + partes[partes.length - 1].split('.')[0];
-        await cloudinary.uploader.destroy(publicId, { resource_type: 'auto' });
-      } catch(e) {}
+      const filePath = path.join(__dirname, m.mediaUrl);
+      fs.unlink(filePath, () => {});
       m.mediaUrl = null;
       m.mediaExpired = true;
       mudou = true;
     }
-  }
+  });
   if (mudou) saveDB(db);
 }
-setInterval(limparMidiaAntiga, 30 * 60 * 1000);
+setInterval(limparMidiaAntiga, 30 * 60 * 1000); // checa a cada 30 min
 
-// ---------- Inicia o servidor só depois de conectar no Mongo ----------
-init().then(() => {
-  server.listen(PORT, () => console.log(`Servidor rodando em http://localhost:${PORT}`));
-}).catch(e => {
-  console.error('[db] falha ao conectar:', e);
-  process.exit(1);
+
+// ==========================================================================
+//  PAINEL ADMIN
+// ==========================================================================
+const ADMIN_KEY = process.env.ADMIN_KEY || 'chatdevs-admin-2024';
+
+function checkAdmin(req, res) {
+  const key = req.headers['x-admin-key'] || req.query.key;
+  if (key !== ADMIN_KEY) { res.status(401).json({ error: 'Não autorizado' }); return false; }
+  return true;
+}
+
+// ── Novidades ──────────────────────────────────────────────────────────────
+app.get('/api/novidades', (req, res) => {
+  const db = loadDB();
+  res.json({ novidades: db.novidades || [] });
+});
+
+app.post('/api/admin/novidades', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const { titulo, texto, imageUrl } = req.body;
+  if (!titulo || !texto) return res.status(400).json({ error: 'Título e texto são obrigatórios' });
+  const db = loadDB();
+  if (!db.novidades) db.novidades = [];
+  const nova = { id: uuidv4(), titulo, texto, imageUrl: imageUrl || null, criadaEm: Date.now() };
+  db.novidades.unshift(nova);
+  saveDB(db);
+  res.json({ ok: true, novidade: nova });
+});
+
+app.put('/api/admin/novidades/:id', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const db = loadDB();
+  if (!db.novidades) db.novidades = [];
+  const n = db.novidades.find(x => x.id === req.params.id);
+  if (!n) return res.status(404).json({ error: 'Não encontrada' });
+  const { titulo, texto, imageUrl } = req.body;
+  if (titulo) n.titulo = titulo;
+  if (texto) n.texto = texto;
+  if (imageUrl !== undefined) n.imageUrl = imageUrl || null;
+  n.editadaEm = Date.now();
+  saveDB(db);
+  res.json({ ok: true, novidade: n });
+});
+
+app.delete('/api/admin/novidades/:id', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const db = loadDB();
+  db.novidades = (db.novidades || []).filter(x => x.id !== req.params.id);
+  saveDB(db);
+  res.json({ ok: true });
+});
+
+// ── Grupos ─────────────────────────────────────────────────────────────────
+app.get('/api/admin/grupos', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const db = loadDB();
+  const grupos = db.chats
+    .filter(c => c.type === 'group')
+    .map(c => {
+      const dono = db.users.find(u => u.id === c.ownerId);
+      return {
+        id: c.id,
+        name: c.name,
+        description: c.description || '',
+        photoUrl: c.photoUrl || null,
+        membros: (c.members || []).length,
+        trancado: !!c.trancado,
+        emailDono: dono ? dono.email : 'desconhecido',
+        criadoEm: c.createdAt || null
+      };
+    });
+  res.json({ grupos });
+});
+
+app.post('/api/admin/grupos/:chatId/trancar', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const db = loadDB();
+  const chat = db.chats.find(c => c.id === req.params.chatId);
+  if (!chat) return res.status(404).json({ error: 'Grupo não encontrado' });
+  chat.trancado = !chat.trancado;
+  chat.modoEnvio = chat.trancado ? 'dono' : 'todos';
+  saveDB(db);
+  res.json({ ok: true, trancado: chat.trancado });
+});
+
+app.delete('/api/admin/grupos/:chatId', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const db = loadDB();
+  db.chats = db.chats.filter(c => c.id !== req.params.chatId);
+  db.messages = db.messages.filter(m => m.chatId !== req.params.chatId);
+  saveDB(db);
+  res.json({ ok: true });
+});
+
+// ── Membros ────────────────────────────────────────────────────────────────
+app.get('/api/admin/membros', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const db = loadDB();
+  const membros = db.users.map(u => ({
+    id: u.id,
+    username: u.username,
+    email: u.email,
+    photoUrl: u.photoUrl || null,
+    bloqueado: !!u.bloqueadoAdmin,
+    criadoEm: u.createdAt || null
+  }));
+  res.json({ membros });
+});
+
+app.post('/api/admin/membros/:userId/bloquear', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const db = loadDB();
+  const user = db.users.find(u => u.id === req.params.userId);
+  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+  user.bloqueadoAdmin = !user.bloqueadoAdmin;
+  saveDB(db);
+  res.json({ ok: true, bloqueado: user.bloqueadoAdmin });
+});
+
+app.delete('/api/admin/membros/:userId', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const db = loadDB();
+  db.users = db.users.filter(u => u.id !== req.params.userId);
+  // remove de todos os grupos
+  db.chats.forEach(c => {
+    if (c.members) c.members = c.members.filter(id => id !== req.params.userId);
+    if (c.admins) c.admins = c.admins.filter(id => id !== req.params.userId);
+  });
+  db.messages = db.messages.filter(m => m.senderId !== req.params.userId);
+  saveDB(db);
+  res.json({ ok: true });
+});
+
+// ── Admins do painel ───────────────────────────────────────────────────────
+app.get('/api/admin/admins', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const db = loadDB();
+  const admins = (db.painelAdmins || []).map(id => {
+    const u = db.users.find(u => u.id === id);
+    return u ? { id: u.id, username: u.username, email: u.email, photoUrl: u.photoUrl || null } : null;
+  }).filter(Boolean);
+  res.json({ admins });
+});
+
+app.post('/api/admin/admins/:userId', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const db = loadDB();
+  if (!db.painelAdmins) db.painelAdmins = [];
+  const user = db.users.find(u => u.id === req.params.userId);
+  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+  if (!db.painelAdmins.includes(user.id)) db.painelAdmins.push(user.id);
+  saveDB(db);
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/admins/:userId', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const db = loadDB();
+  db.painelAdmins = (db.painelAdmins || []).filter(id => id !== req.params.userId);
+  saveDB(db);
+  res.json({ ok: true });
+});
+
+// Buscar usuário por username (pra adicionar admin)
+app.get('/api/admin/buscar-usuario', (req, res) => {
+  if (!checkAdmin(req, res)) return;
+  const { q } = req.query;
+  const db = loadDB();
+  const u = db.users.find(x => x.username.toLowerCase() === (q || '').toLowerCase() || x.email.toLowerCase() === (q || '').toLowerCase());
+  if (!u) return res.status(404).json({ error: 'Usuário não encontrado' });
+  res.json({ id: u.id, username: u.username, email: u.email, photoUrl: u.photoUrl || null });
+});
+
+server.listen(PORT, () => {
+  console.log(`Servidor rodando em http://localhost:${PORT}`);
 });

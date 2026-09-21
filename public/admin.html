@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin — ChatDevs</title>
+<style>
+  :root {
+    --bg: #0d0d0d;
+    --bg-panel: #161616;
+    --bg-card: #1e1e1e;
+    --border: #2a2a2a;
+    --text: #e8e8e8;
+    --text-muted: #888;
+    --accent: #ffb454;
+    --accent-dim: rgba(255,180,84,.15);
+    --red: #ff5c5c;
+    --red-dim: rgba(255,92,92,.15);
+    --green: #3ecf8e;
+    --green-dim: rgba(62,207,142,.12);
+    --shadow: rgba(0,0,0,.4);
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* ── Login ── */
+  #login-screen {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh;
+  }
+  .login-box {
+    background: var(--bg-panel); border: 1px solid var(--border);
+    border-radius: 16px; padding: 40px 36px; width: 340px;
+    box-shadow: 0 20px 60px var(--shadow);
+  }
+  .login-box h1 { font-size: 22px; margin-bottom: 6px; }
+  .login-box p { color: var(--text-muted); font-size: 13px; margin-bottom: 24px; }
+
+  /* ── Layout ── */
+  #admin-screen { display: none; }
+  .admin-layout { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 220px; flex-shrink: 0; background: var(--bg-panel);
+    border-right: 1px solid var(--border); padding: 24px 0;
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+  }
+  .sidebar-logo { padding: 0 20px 24px; font-size: 18px; font-weight: 700; color: var(--accent); border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+  .sidebar-logo span { font-size: 11px; font-weight: 400; color: var(--text-muted); display: block; margin-top: 2px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 20px; cursor: pointer; border-radius: 0;
+    font-size: 14px; color: var(--text-muted);
+    transition: background .15s, color .15s;
+    border: none; background: none; width: 100%; text-align: left;
+  }
+  .nav-item:hover { background: var(--accent-dim); color: var(--text); }
+  .nav-item.ativo { background: var(--accent-dim); color: var(--accent); font-weight: 600; border-left: 3px solid var(--accent); }
+  .nav-icon { font-size: 18px; width: 24px; text-align: center; }
+  .main { flex: 1; padding: 32px; overflow-y: auto; }
+  .page { display: none; }
+  .page.ativo { display: block; }
+  .page-title { font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+  .page-sub { color: var(--text-muted); font-size: 13px; margin-bottom: 28px; }
+
+  /* ── Cards e Grid ── */
+  .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 18px; position: relative;
+  }
+  .card-img { width: 100%; height: 160px; object-fit: cover; border-radius: 6px; margin-bottom: 12px; background: var(--border); }
+  .card-img-placeholder { width: 100%; height: 160px; border-radius: 6px; margin-bottom: 12px; background: var(--border); display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 32px; }
+  .card-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .card-text { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-bottom: 14px; }
+  .card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .card-meta { font-size: 11px; color: var(--text-muted); margin-bottom: 10px; }
+
+  /* ── Tabela ── */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 10px 14px; color: var(--text-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid var(--border); }
+  td { padding: 12px 14px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  .avatar-sm { width: 34px; height: 34px; border-radius: 50%; object-fit: cover; background: var(--border); display: inline-flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: var(--accent); flex-shrink: 0; }
+  .user-cell { display: flex; align-items: center; gap: 10px; }
+  .tag { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .tag-bloq { background: var(--red-dim); color: var(--red); }
+  .tag-ativo { background: var(--green-dim); color: var(--green); }
+  .tag-trancado { background: var(--red-dim); color: var(--red); }
+  .tag-aberto { background: var(--green-dim); color: var(--green); }
+
+  /* ── Inputs e Botões ── */
+  input, textarea, select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 14px; color: var(--text);
+    font-size: 14px; outline: none; transition: border .15s;
+  }
+  input:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 80px; }
+  .form-group { margin-bottom: 14px; }
+  .form-label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; display: block; font-weight: 500; }
+  .btn {
+    padding: 8px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+    cursor: pointer; border: none; transition: opacity .15s, transform .1s;
+    display: inline-flex; align-items: center; gap: 6px;
+  }
+  .btn:hover { opacity: .85; }
+  .btn:active { transform: scale(.97); }
+  .btn-accent { background: var(--accent); color: #1a1000; }
+  .btn-outline { background: none; border: 1px solid var(--border); color: var(--text); }
+  .btn-danger { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,92,92,.3); }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-full { width: 100%; justify-content: center; margin-top: 4px; }
+
+  /* ── Form criação ── */
+  .form-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 28px; }
+  .form-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 18px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* ── Toast ── */
+  #toast { position: fixed; bottom: 24px; right: 24px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+  .toast-item { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 12px 18px; font-size: 13px; box-shadow: 0 4px 16px var(--shadow); animation: slideIn .2s ease; }
+  .toast-item.erro { border-color: var(--red); color: var(--red); }
+  .toast-item.sucesso { border-color: var(--green); color: var(--green); }
+  @keyframes slideIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+
+  /* ── Modal ── */
+  .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 1000; display: none; align-items: center; justify-content: center; }
+  .modal-bg.aberto { display: flex; }
+  .modal-box { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; padding: 28px; width: 100%; max-width: 460px; }
+  .modal-box h3 { font-size: 16px; font-weight: 700; margin-bottom: 18px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; }
+
+  /* ── Busca ── */
+  .search-row { display: flex; gap: 10px; margin-bottom: 20px; }
+  .search-row input { max-width: 320px; }
+
+  .empty { color: var(--text-muted); text-align: center; padding: 40px; font-size: 14px; }
+  .loading { color: var(--text-muted); padding: 20px; font-size: 13px; }
+  .divider { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+</style>
+</head>
+<body>
+
+<!-- Tela de login -->
+<div id="login-screen">
+  <div class="login-box">
+    <h1>🛡️ Painel Admin</h1>
+    <p>ChatDevs — acesso restrito</p>
+    <div class="form-group">
+      <label class="form-label">Chave de acesso</label>
+      <input type="password" id="login-key" placeholder="••••••••" onkeydown="if(event.key==='Enter')entrar()">
+    </div>
+    <button class="btn btn-accent btn-full" onclick="entrar()">Entrar</button>
+    <p id="login-erro" style="color:var(--red);font-size:12px;margin-top:10px;text-align:center"></p>
+  </div>
+</div>
+
+<!-- Painel principal -->
+<div id="admin-screen">
+  <div class="admin-layout">
+    <nav class="sidebar">
+      <div class="sidebar-logo">ChatDevs <span>Painel Admin</span></div>
+      <button class="nav-item ativo" onclick="irPara('novidades',this)">
+        <span class="nav-icon">📢</span> Novidades
+      </button>
+      <button class="nav-item" onclick="irPara('grupos',this)">
+        <span class="nav-icon">👥</span> Grupos
+      </button>
+      <button class="nav-item" onclick="irPara('membros',this)">
+        <span class="nav-icon">👤</span> Membros
+      </button>
+      <button class="nav-item" onclick="irPara('admins',this)">
+        <span class="nav-icon">🔑</span> Admins
+      </button>
+    </nav>
+
+    <main class="main">
+
+      <!-- ══ NOVIDADES ══ -->
+      <div class="page ativo" id="page-novidades">
+        <div class="page-title">📢 Novidades</div>
+        <div class="page-sub">Publique avisos e atualizações que aparecem na home do app.</div>
+
+        <div class="form-card">
+          <h3>Nova publicação</h3>
+          <div class="form-group">
+            <label class="form-label">Título *</label>
+            <input type="text" id="nov-titulo" placeholder="Ex: Nova versão disponível!">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Texto *</label>
+            <textarea id="nov-texto" placeholder="Descreva a novidade..."></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">URL da imagem (opcional)</label>
+            <input type="url" id="nov-img" placeholder="https://...">
+          </div>
+          <button class="btn btn-accent" onclick="criarNovidade()">✚ Publicar</button>
+        </div>
+
+        <div id="novidades-lista" class="cards-grid">
+          <div class="loading">Carregando...</div>
+        </div>
+      </div>
+
+      <!-- ══ GRUPOS ══ -->
+      <div class="page" id="page-grupos">
+        <div class="page-title">👥 Grupos</div>
+        <div class="page-sub">Gerencie os grupos criados no ChatDevs.</div>
+        <div class="search-row">
+          <input type="text" id="busca-grupos" placeholder="Buscar por nome..." oninput="filtrarGrupos()">
+        </div>
+        <div class="table-wrap">
+          <table id="tabela-grupos">
+            <thead>
+              <tr>
+                <th>Grupo</th>
+                <th>Membros</th>
+                <th>Dono (email)</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="grupos-body">
+              <tr><td colspan="5" class="loading">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ══ MEMBROS ══ -->
+      <div class="page" id="page-membros">
+        <div class="page-title">👤 Membros</div>
+        <div class="page-sub">Visualize e gerencie os usuários cadastrados.</div>
+        <div class="search-row">
+          <input type="text" id="busca-membros" placeholder="Buscar por nome ou email..." oninput="filtrarMembros()">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Usuário</th>
+                <th>Email</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="membros-body">
+              <tr><td colspan="4" class="loading">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ══ ADMINS ══ -->
+      <div class="page" id="page-admins">
+        <div class="page-title">🔑 Admins do Painel</div>
+        <div class="page-sub">Defina quem tem acesso a este painel além de você.</div>
+
+        <div class="form-card">
+          <h3>Adicionar admin</h3>
+          <div style="display:flex;gap:10px">
+            <input type="text" id="admin-busca" placeholder="Nome de usuário ou email">
+            <button class="btn btn-accent" onclick="adicionarAdmin()" style="white-space:nowrap">Adicionar</button>
+          </div>
+        </div>
+
+        <div id="admins-lista"></div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- Modal editar novidade -->
+<div class="modal-bg" id="modal-editar-nov">
+  <div class="modal-box">
+    <h3>Editar novidade</h3>
+    <input type="hidden" id="edit-nov-id">
+    <div class="form-group">
+      <label class="form-label">Título</label>
+      <input type="text" id="edit-nov-titulo">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Texto</label>
+      <textarea id="edit-nov-texto"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">URL da imagem</label>
+      <input type="url" id="edit-nov-img">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="fecharModal('modal-editar-nov')">Cancelar</button>
+      <button class="btn btn-accent" onclick="salvarEdicaoNovidade()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+let ADMIN_KEY = '';
+let todosGrupos = [];
+let todosMembros = [];
+
+// ── Auth ──────────────────────────────────────────────────────────────────
+function entrar() {
+  const key = document.getElementById('login-key').value.trim();
+  if (!key) return;
+  ADMIN_KEY = key;
+  // testa a chave buscando novidades
+  fetch('/api/admin/grupos', { headers: { 'x-admin-key': key } })
+    .then(r => {
+      if (!r.ok) { document.getElementById('login-erro').textContent = 'Chave incorreta.'; ADMIN_KEY = ''; return; }
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('admin-screen').style.display = 'block';
+      carregarTudo();
+    }).catch(() => { document.getElementById('login-erro').textContent = 'Erro de conexão.'; });
+}
+document.getElementById('login-key').addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); });
+
+// ── Navegação ─────────────────────────────────────────────────────────────
+function irPara(pagina, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('ativo'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('ativo'));
+  document.getElementById('page-' + pagina).classList.add('ativo');
+  btn.classList.add('ativo');
+}
+
+function carregarTudo() {
+  carregarNovidades();
+  carregarGrupos();
+  carregarMembros();
+  carregarAdmins();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+function toast(msg, tipo = 'sucesso') {
+  const el = document.createElement('div');
+  el.className = 'toast-item ' + tipo;
+  el.textContent = msg;
+  document.getElementById('toast').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+function fecharModal(id) { document.getElementById(id).classList.remove('aberto'); }
+
+// ── NOVIDADES ─────────────────────────────────────────────────────────────
+async function carregarNovidades() {
+  const r = await fetch('/api/novidades');
+  const { novidades } = await r.json();
+  const lista = document.getElementById('novidades-lista');
+  if (!novidades.length) { lista.innerHTML = '<p class="empty">Nenhuma novidade publicada ainda.</p>'; return; }
+  lista.innerHTML = novidades.map(n => `
+    <div class="card" id="nov-${n.id}">
+      ${n.imageUrl ? `<img class="card-img" src="${esc(n.imageUrl)}" alt="" onerror="this.style.display='none'">` : `<div class="card-img-placeholder">🖼️</div>`}
+      <div class="card-title">${esc(n.titulo)}</div>
+      <div class="card-text">${esc(n.texto)}</div>
+      <div class="card-meta">${new Date(n.criadaEm).toLocaleString('pt-BR')}</div>
+      <div class="card-actions">
+        <button class="btn btn-outline btn-sm" onclick="abrirEdicaoNovidade('${n.id}','${esc(n.titulo)}','${esc(n.texto)}','${esc(n.imageUrl||'')}')">✏️ Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="deletarNovidade('${n.id}')">🗑 Apagar</button>
+      </div>
+    </div>`).join('');
+}
+
+async function criarNovidade() {
+  const titulo = document.getElementById('nov-titulo').value.trim();
+  const texto = document.getElementById('nov-texto').value.trim();
+  const imageUrl = document.getElementById('nov-img').value.trim();
+  if (!titulo || !texto) { toast('Título e texto são obrigatórios.', 'erro'); return; }
+  const r = await fetch('/api/admin/novidades', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ titulo, texto, imageUrl })
+  });
+  if (!r.ok) { toast('Erro ao criar.', 'erro'); return; }
+  document.getElementById('nov-titulo').value = '';
+  document.getElementById('nov-texto').value = '';
+  document.getElementById('nov-img').value = '';
+  toast('Novidade publicada!');
+  carregarNovidades();
+}
+
+function abrirEdicaoNovidade(id, titulo, texto, img) {
+  document.getElementById('edit-nov-id').value = id;
+  document.getElementById('edit-nov-titulo').value = titulo;
+  document.getElementById('edit-nov-texto').value = texto;
+  document.getElementById('edit-nov-img').value = img;
+  document.getElementById('modal-editar-nov').classList.add('aberto');
+}
+
+async function salvarEdicaoNovidade() {
+  const id = document.getElementById('edit-nov-id').value;
+  const titulo = document.getElementById('edit-nov-titulo').value.trim();
+  const texto = document.getElementById('edit-nov-texto').value.trim();
+  const imageUrl = document.getElementById('edit-nov-img').value.trim();
+  const r = await fetch('/api/admin/novidades/' + id, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ titulo, texto, imageUrl })
+  });
+  if (!r.ok) { toast('Erro ao salvar.', 'erro'); return; }
+  fecharModal('modal-editar-nov');
+  toast('Novidade atualizada!');
+  carregarNovidades();
+}
+
+async function deletarNovidade(id) {
+  if (!confirm('Apagar esta novidade?')) return;
+  await fetch('/api/admin/novidades/' + id, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
+  toast('Apagada.');
+  carregarNovidades();
+}
+
+// ── GRUPOS ────────────────────────────────────────────────────────────────
+async function carregarGrupos() {
+  const r = await fetch('/api/admin/grupos', { headers: { 'x-admin-key': ADMIN_KEY } });
+  const { grupos } = await r.json();
+  todosGrupos = grupos;
+  renderGrupos(grupos);
+}
+
+function renderGrupos(grupos) {
+  const tbody = document.getElementById('grupos-body');
+  if (!grupos.length) { tbody.innerHTML = '<tr><td colspan="5" class="empty">Nenhum grupo ainda.</td></tr>'; return; }
+  tbody.innerHTML = grupos.map(g => `
+    <tr id="grupo-${g.id}">
+      <td>
+        <div class="user-cell">
+          ${g.photoUrl ? `<img class="avatar-sm" src="${esc(g.photoUrl)}" alt="">` : `<div class="avatar-sm">👥</div>`}
+          <div>
+            <div style="font-weight:600">${esc(g.name)}</div>
+            ${g.description ? `<div style="font-size:11px;color:var(--text-muted)">${esc(g.description.slice(0,40))}${g.description.length>40?'…':''}</div>` : ''}
+          </div>
+        </div>
+      </td>
+      <td>${g.membros}</td>
+      <td style="font-size:12px;color:var(--text-muted)">${esc(g.emailDono)}</td>
+      <td><span class="tag ${g.trancado ? 'tag-trancado' : 'tag-aberto'}">${g.trancado ? '🔒 Trancado' : '🔓 Aberto'}</span></td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" onclick="trancarGrupo('${g.id}',${g.trancado})">${g.trancado ? 'Abrir' : 'Trancar'}</button>
+          <button class="btn btn-danger btn-sm" onclick="deletarGrupo('${g.id}','${esc(g.name)}')">🗑</button>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+function filtrarGrupos() {
+  const q = document.getElementById('busca-grupos').value.toLowerCase();
+  renderGrupos(todosGrupos.filter(g => g.name.toLowerCase().includes(q) || g.emailDono.toLowerCase().includes(q)));
+}
+
+async function trancarGrupo(id, trancado) {
+  const r = await fetch('/api/admin/grupos/' + id + '/trancar', { method: 'POST', headers: { 'x-admin-key': ADMIN_KEY } });
+  if (!r.ok) { toast('Erro.', 'erro'); return; }
+  toast(trancado ? 'Grupo aberto!' : 'Grupo trancado!');
+  carregarGrupos();
+}
+
+async function deletarGrupo(id, nome) {
+  if (!confirm(`Apagar o grupo "${nome}" e todas as mensagens? Isso é irreversível.`)) return;
+  await fetch('/api/admin/grupos/' + id, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
+  toast('Grupo apagado.');
+  carregarGrupos();
+}
+
+// ── MEMBROS ───────────────────────────────────────────────────────────────
+async function carregarMembros() {
+  const r = await fetch('/api/admin/membros', { headers: { 'x-admin-key': ADMIN_KEY } });
+  const { membros } = await r.json();
+  todosMembros = membros;
+  renderMembros(membros);
+}
+
+function renderMembros(membros) {
+  const tbody = document.getElementById('membros-body');
+  if (!membros.length) { tbody.innerHTML = '<tr><td colspan="4" class="empty">Nenhum membro ainda.</td></tr>'; return; }
+  tbody.innerHTML = membros.map(m => `
+    <tr id="membro-${m.id}">
+      <td>
+        <div class="user-cell">
+          ${m.photoUrl ? `<img class="avatar-sm" src="${esc(m.photoUrl)}" alt="">` : `<div class="avatar-sm">${esc(m.username[0].toUpperCase())}</div>`}
+          <span style="font-weight:500">${esc(m.username)}</span>
+        </div>
+      </td>
+      <td style="font-size:12px;color:var(--text-muted)">${esc(m.email)}</td>
+      <td><span class="tag ${m.bloqueado ? 'tag-bloq' : 'tag-ativo'}">${m.bloqueado ? '🚫 Bloqueado' : '✅ Ativo'}</span></td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" onclick="bloquearMembro('${m.id}',${m.bloqueado})">${m.bloqueado ? 'Desbloquear' : 'Bloquear'}</button>
+          <button class="btn btn-danger btn-sm" onclick="deletarMembro('${m.id}','${esc(m.username)}')">🗑</button>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+function filtrarMembros() {
+  const q = document.getElementById('busca-membros').value.toLowerCase();
+  renderMembros(todosMembros.filter(m => m.username.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)));
+}
+
+async function bloquearMembro(id, bloqueado) {
+  const r = await fetch('/api/admin/membros/' + id + '/bloquear', { method: 'POST', headers: { 'x-admin-key': ADMIN_KEY } });
+  if (!r.ok) { toast('Erro.', 'erro'); return; }
+  toast(bloqueado ? 'Usuário desbloqueado!' : 'Usuário bloqueado!');
+  carregarMembros();
+}
+
+async function deletarMembro(id, nome) {
+  if (!confirm(`Apagar o usuário "${nome}" permanentemente?`)) return;
+  await fetch('/api/admin/membros/' + id, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
+  toast('Usuário removido.');
+  carregarMembros();
+}
+
+// ── ADMINS ────────────────────────────────────────────────────────────────
+async function carregarAdmins() {
+  const r = await fetch('/api/admin/admins', { headers: { 'x-admin-key': ADMIN_KEY } });
+  const { admins } = await r.json();
+  const el = document.getElementById('admins-lista');
+  if (!admins.length) { el.innerHTML = '<p class="empty">Nenhum admin adicionado ainda.</p>'; return; }
+  el.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Email</th><th></th></tr></thead><tbody>` +
+    admins.map(a => `
+      <tr>
+        <td>
+          <div class="user-cell">
+            ${a.photoUrl ? `<img class="avatar-sm" src="${esc(a.photoUrl)}" alt="">` : `<div class="avatar-sm">${esc(a.username[0].toUpperCase())}</div>`}
+            <span style="font-weight:500">${esc(a.username)}</span>
+          </div>
+        </td>
+        <td style="font-size:12px;color:var(--text-muted)">${esc(a.email)}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="removerAdmin('${a.id}','${esc(a.username)}')">Remover</button></td>
+      </tr>`).join('') +
+  `</tbody></table></div>`;
+}
+
+async function adicionarAdmin() {
+  const q = document.getElementById('admin-busca').value.trim();
+  if (!q) return;
+  const r = await fetch('/api/admin/buscar-usuario?q=' + encodeURIComponent(q), { headers: { 'x-admin-key': ADMIN_KEY } });
+  if (!r.ok) { toast('Usuário não encontrado.', 'erro'); return; }
+  const u = await r.json();
+  const r2 = await fetch('/api/admin/admins/' + u.id, { method: 'POST', headers: { 'x-admin-key': ADMIN_KEY } });
+  if (!r2.ok) { toast('Erro ao adicionar.', 'erro'); return; }
+  document.getElementById('admin-busca').value = '';
+  toast(u.username + ' virou admin!');
+  carregarAdmins();
+}
+
+async function removerAdmin(id, nome) {
+  if (!confirm(`Remover ${nome} dos admins?`)) return;
+  await fetch('/api/admin/admins/' + id, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
+  toast('Admin removido.');
+  carregarAdmins();
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────
+function esc(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Fechar modais clicando fora
+document.querySelectorAll('.modal-bg').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('aberto'); });
+});
+</script>
+</body>
+</html>
