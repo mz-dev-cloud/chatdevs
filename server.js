@@ -6,7 +6,7 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
-const { loadDB, saveDB } = require('./db');
+const { init, loadDB, saveDB } = require('./db');
 
 const app = express();
 const server = http.createServer(app);
@@ -1506,6 +1506,13 @@ app.get('/api/admin/buscar-usuario', (req, res) => {
   res.json({ id: u.id, username: u.username, email: u.email, photoUrl: u.photoUrl || null });
 });
 
-server.listen(PORT, () => {
-  console.log(`Servidor rodando em http://localhost:${PORT}`);
-});
+init()
+  .then(() => {
+    server.listen(PORT, () => {
+      console.log(`Servidor rodando em http://localhost:${PORT}`);
+    });
+  })
+  .catch(err => {
+    console.error('[db] Erro ao inicializar o MongoDB:', err);
+    process.exit(1);
+  });
