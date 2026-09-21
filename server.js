@@ -1487,7 +1487,7 @@ app.post('/api/admin/admins/:userId', (req, res) => {
   saveDB(db);
   res.json({ ok: true });
 });
-
+  
 app.delete('/api/admin/admins/:userId', (req, res) => {
   if (!checkAdmin(req, res)) return;
   const db = loadDB();

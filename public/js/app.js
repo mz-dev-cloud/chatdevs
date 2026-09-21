@@ -2654,7 +2654,7 @@ async function abrirPerfilUsuario(userId) {
     <div class="modal-overlay" id="modal-overlay">
       <div class="modal-box modal-box--perfil">
         <div class="info-grupo-topo">
-          ${fotoHtml}
+          ${fotoHtml}  
           <h3 class="modal-title info-grupo-nome">${escapeHtml(u.username)}</h3>
           ${bioHtml}
         </div>
