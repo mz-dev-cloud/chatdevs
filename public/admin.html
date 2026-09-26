@@ -522,52 +522,52 @@ async function carregarAdmins() {
   const r = await fetch('/api/admin/admins', { headers: { 'x-admin-key': ADMIN_KEY } });
   const { admins } = await r.json();
   const el = document.getElementById('admins-lista');
-  if (!admins.length) { el.innerHTML = '<p class="empty">Nenhum admin adicionado ainda.</p>'; return; }
-  el.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Email</th><th></th></tr></thead><tbody>` +
-    admins.map(a => `
+  se (!administradores.comprimento) { o.HTML interno = '<p class="empty">Nenhum admin adicionado ainda.</p>'; return; }
+  o.HTML interno = `<div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Email</th><th></th></tr></thead><tbody>` +
+    administradores.mapa(a => `
       <tr>
         <td>
-          <div class="user-cell">
-            ${a.photoUrl ? `<img class="avatar-sm" src="${esc(a.photoUrl)}" alt="">` : `<div class="avatar-sm">${esc(a.username[0].toUpperCase())}</div>`}
-            <span style="font-weight:500">${esc(a.username)}</span>
-          </div>
+          <div class="célula de usuário">
+            ${a.fotoUrl ? `<img class="avatar-sm" src="${esc(a.photoUrl)}" alt="">` : `<div class="avatar-sm">${esc(a.username[0].toUpperCase())}</div>`}
+            <span style="peso da fonte:500">${escrúpulo(a.username)}</span>
+          </dividir>
         </td>
-        <td style="font-size:12px;color:var(--text-muted)">${esc(a.email)}</td>
+        <td style="tamanho da fonte:12px;cor:var(--texto silenciado)">${esc(a.email)}</td>
         <td><button class="btn btn-danger btn-sm" onclick="removerAdmin('${a.id}','${esc(a.username)}')">Remover</button></td>
-      </tr>`).join('') +
-  `</tbody></table></div>`;
+      </tr>`).juntar('') +
+  `</corpo></mesa></dividir>`;
 }
 
-async function adicionarAdmin() {
-  const q = document.getElementById('admin-busca').value.trim();
-  if (!q) return;
-  const r = await fetch('/api/admin/buscar-usuario?q=' + encodeURIComponent(q), { headers: { 'x-admin-key': ADMIN_KEY } });
-  if (!r.ok) { toast('Usuário não encontrado.', 'erro'); return; }
-  const u = await r.json();
-  const r2 = await fetch('/api/admin/admins/' + u.id, { method: 'POST', headers: { 'x-admin-key': ADMIN_KEY } });
-  if (!r2.ok) { toast('Erro ao adicionar.', 'erro'); return; }
-  document.getElementById('admin-busca').value = '';
-  toast(u.username + ' virou admin!');
+assíncrono função adicionárioAdministrador() {
+  const q = documento.obterElementoPorId('admin-busca').value.trim();
+  se (!q) retornar;
+  const r = esperar buscar('/api/admin/buscar-usuario?q=' + encodeURIComponent(q), { headers: { 'x-admin-key': ADMIN_KEY } });
+  se (!r.ok) { torrada('Usuário não encontrado.', 'erro'); return; }
+  const u = esperar r.json();
+  const r2 = esperar buscar('/api/admin/admins/' + u.id, { method: 'POST', headers: { 'x-admin-key': ADMIN_KEY } });
+  se (!r2.ok) { torrada('Erro ao adicionar.', 'erro'); return; }
+  documento.obterElementoPorId('admin-busca').valor = '';
+  torrada(u.nome de usuário + ' virou admin!');
   carregarAdmins();
 }
 
-async function removerAdmin(id, nome) {
-  if (!confirm(`Remover ${nome} dos admins?`)) return;
-  await fetch('/api/admin/admins/' + id, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
-  toast('Admin removido.');
+assíncrono função removedorAdministrador(id, nome) {
+  se (!confirmar(`Removedor ${nome} dos administradores?`)) retornar;
+  esperar buscar('/api/admin/admins/' + id, { método: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
+  torrada('Administrador removido.');
   carregarAdmins();
 }
 
-// ── Utils ─────────────────────────────────────────────────────────────────
-function esc(str) {
-  if (!str) return '';
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+// ── Utilitários ─────────────────────────────────────────────────────────────────
+função escrúpulo(str) {
+  se (!str) retornar '';
+  retornar Corda(str).substituir(/&/g,'&amp;').substituir(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 // Fechar modais clicando fora
-document.querySelectorAll('.modal-bg').forEach(m => {
-  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('aberto'); });
+documento.consultaSelectorAll('.modal-bg').para cada um(m => {
+  m.addEventListener('clique', e => { se (e.alvo === m) m.classList.remove('aberto'); });
 });
-</script>
-</body>
-</html>
+</roteiro>
+</corpo>
+  </HTML>
