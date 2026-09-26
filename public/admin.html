@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Admin — ChatDevs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c11;
+    --bg-panel: #10131a;
+    --bg-card: #151a22;
+    --bg-raised: #1b202a;
+    --border: #242a35;
+    --border-soft: #1c212a;
+    --text: #eceef2;
+    --text-muted: #838ea0;
+    --text-faint: #545f70;
+
+    --accent: #8b6bf2;
+    --accent-2: #5a8dee;
+    --accent-soft: rgba(139,107,242,.14);
+    --accent-text: #c9baff;
+
+    --green: #33d6b0;
+    --green-soft: rgba(51,214,176,.13);
+    --red: #fb7290;
+    --red-soft: rgba(251,114,144,.13);
+
+    --shadow: rgba(0,0,0,.45);
+    --radius-sm: 8px;
+    --radius: 12px;
+    --radius-lg: 18px;
+
+    --font-display: 'Sora', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+
+    --nav-h: 64px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-tap-highlight-color: transparent; }
+  body {
+    font-family: var(--font-body);
+    background:
+      radial-gradient(1100px 600px at 90% -10%, rgba(139,107,242,.08), transparent 60%),
+      radial-gradient(900px 500px at -10% 10%, rgba(90,141,238,.06), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  ::selection { background: var(--accent-soft); color: var(--accent-text); }
+  svg.icn { width: 18px; height: 18px; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; display: block; }
+
+  /* ── Login ── */
+  #login-screen {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 24px;
+  }
+  .login-box {
+    position: relative;
+    background: linear-gradient(180deg, var(--bg-raised), var(--bg-panel));
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 40px 34px; width: 100%; max-width: 360px;
+    box-shadow: 0 30px 80px var(--shadow);
+  }
+  .login-box::before {
+    content: ''; position: absolute; inset: -1px; border-radius: var(--radius-lg);
+    padding: 1px; pointer-events: none;
+    background: linear-gradient(135deg, rgba(139,107,242,.5), transparent 45%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+  }
+  .login-mark {
+    width: 46px; height: 46px; border-radius: 13px; margin-bottom: 20px;
+    background: linear-gradient(140deg, var(--accent), var(--accent-2));
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 8px 22px rgba(139,107,242,.35);
+  }
+  .login-mark svg.icn { width: 22px; height: 22px; stroke: #0a0c11; stroke-width: 2.1; }
+  .login-box h1 { font-family: var(--font-display); font-size: 21px; font-weight: 700; letter-spacing: -.01em; margin-bottom: 5px; }
+  .login-box p { color: var(--text-muted); font-size: 13.5px; margin-bottom: 26px; }
+
+  /* ── Layout ── */
+  #admin-screen { display: none; }
+  .admin-layout { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 226px; flex-shrink: 0; background: var(--bg-panel);
+    border-right: 1px solid var(--border-soft); padding: 22px 14px;
+    position: sticky; top: 0; height: 100vh; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .sidebar-logo {
+    padding: 4px 10px 20px; margin-bottom: 8px;
+    border-bottom: 1px solid var(--border-soft);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .sidebar-logo-mark {
+    width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0;
+    background: linear-gradient(140deg, var(--accent), var(--accent-2));
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sidebar-logo-mark svg.icn { width: 16px; height: 16px; stroke: #0a0c11; stroke-width: 2.2; }
+  .sidebar-logo-text { font-family: var(--font-display); font-size: 15.5px; font-weight: 700; line-height: 1.2; }
+  .sidebar-logo-text span { font-family: var(--font-body); font-size: 11px; font-weight: 500; color: var(--text-faint); display: block; margin-top: 1px; }
+
+  .nav-item {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 12px; cursor: pointer; border-radius: var(--radius-sm);
+    font-size: 13.5px; font-weight: 500; color: var(--text-muted);
+    transition: background .15s ease, color .15s ease;
+    border: none; background: none; width: 100%; text-align: left;
+  }
+  .nav-item:hover { background: var(--bg-raised); color: var(--text); }
+  .nav-item.ativo { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+  .nav-item.ativo svg.icn { stroke: var(--accent-text); }
+  .nav-icon { width: 18px; text-align: center; display: flex; align-items: center; justify-content: center; color: inherit; }
+
+  .main { flex: 1; padding: 34px 38px; overflow-y: auto; min-width: 0; }
+  .page { display: none; }
+  .page.ativo { display: block; animation: fadeIn .18s ease; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+  .page-title {
+    font-family: var(--font-display); font-size: 21px; font-weight: 700; letter-spacing: -.01em;
+    display: flex; align-items: center; gap: 10px; margin-bottom: 5px;
+  }
+  .page-title svg.icn { width: 20px; height: 20px; color: var(--accent-text); stroke: var(--accent-text); }
+  .page-sub { color: var(--text-muted); font-size: 13.5px; margin-bottom: 26px; max-width: 62ch; }
+
+  /* ── Cards ── */
+  .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 16px; }
+  .card {
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px; position: relative;
+    transition: border-color .15s ease;
+  }
+  .card:hover { border-color: #2e3542; }
+  .card-img { width: 100%; height: 150px; object-fit: cover; border-radius: var(--radius-sm); margin-bottom: 13px; background: var(--bg-raised); }
+  .card-img-placeholder {
+    width: 100%; height: 150px; border-radius: var(--radius-sm); margin-bottom: 13px;
+    background: var(--bg-raised); display: flex; align-items: center; justify-content: center; color: var(--text-faint);
+  }
+  .card-img-placeholder svg.icn { width: 30px; height: 30px; }
+  .card-title { font-family: var(--font-display); font-size: 14.5px; font-weight: 700; margin-bottom: 6px; letter-spacing: -.005em; }
+  .card-text { font-size: 13px; color: var(--text-muted); line-height: 1.55; margin-bottom: 14px; word-break: break-word; }
+  .card-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .card-meta { font-size: 11.5px; color: var(--text-faint); margin-bottom: 12px; }
+
+  /* ── Tabela ── */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); -webkit-overflow-scrolling: touch; }
+  table { width: 100%; min-width: 560px; border-collapse: collapse; font-size: 13.5px; }
+  th {
+    text-align: left; padding: 12px 16px; color: var(--text-faint); font-weight: 600; font-size: 11px;
+    letter-spacing: .04em; border-bottom: 1px solid var(--border); white-space: nowrap;
+  }
+  td { padding: 12px 16px; border-bottom: 1px solid var(--border-soft); vertical-align: middle; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.015); }
+  .avatar-sm {
+    width: 34px; height: 34px; border-radius: 50%; object-fit: cover; background: var(--bg-raised);
+    display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-display);
+    font-size: 13px; font-weight: 700; color: var(--accent-text); flex-shrink: 0;
+  }
+  .user-cell { display: flex; align-items: center; gap: 11px; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px 4px 8px; border-radius: 999px;
+    font-size: 11.5px; font-weight: 600; white-space: nowrap;
+  }
+  .tag svg.icn { width: 12px; height: 12px; }
+  .tag-bloq { background: var(--red-soft); color: var(--red); }
+  .tag-ativo { background: var(--green-soft); color: var(--green); }
+  .tag-trancado { background: var(--red-soft); color: var(--red); }
+  .tag-aberto { background: var(--green-soft); color: var(--green); }
+
+  /* ── Inputs e Botões ── */
+  input, textarea, select {
+    width: 100%; background: var(--bg); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px 13px; color: var(--text);
+    font-family: var(--font-body); font-size: 14px; outline: none; transition: border-color .15s, box-shadow .15s;
+  }
+  input::placeholder, textarea::placeholder { color: var(--text-faint); }
+  input:focus, textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  textarea { resize: vertical; min-height: 84px; line-height: 1.5; }
+  .form-group { margin-bottom: 14px; }
+  .form-label { font-size: 12px; color: var(--text-muted); margin-bottom: 6px; display: block; font-weight: 600; }
+
+  .btn {
+    padding: 9px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600;
+    cursor: pointer; border: none; transition: opacity .15s, transform .08s, background .15s;
+    display: inline-flex; align-items: center; gap: 7px; font-family: var(--font-body); white-space: nowrap;
+  }
+  .btn:hover { opacity: .88; }
+  .btn:active { transform: scale(.96); }
+  .btn-accent { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: #0a0c11; }
+  .btn-outline { background: none; border: 1px solid var(--border); color: var(--text); }
+  .btn-outline:hover { background: var(--bg-raised); opacity: 1; border-color: #313846; }
+  .btn-danger { background: var(--red-soft); color: var(--red); border: 1px solid rgba(251,114,144,.25); }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+  .btn-full { width: 100%; justify-content: center; margin-top: 4px; }
+
+  /* ── Form criação ── */
+  .form-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px; margin-bottom: 26px; }
+  .form-card h3 { font-family: var(--font-display); font-size: 14.5px; font-weight: 700; margin-bottom: 18px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* ── Toast ── */
+  #toast {
+    position: fixed; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); right: 24px; z-index: 9999;
+    display: flex; flex-direction: column; gap: 8px; max-width: calc(100vw - 32px);
+  }
+  .toast-item {
+    background: var(--bg-raised); border: 1px solid var(--border); border-left: 3px solid var(--accent);
+    border-radius: var(--radius-sm); padding: 12px 16px; font-size: 13px; font-weight: 500;
+    box-shadow: 0 10px 30px var(--shadow); animation: slideIn .2s ease;
+  }
+  .toast-item.erro { border-left-color: var(--red); color: var(--red); }
+  .toast-item.sucesso { border-left-color: var(--green); color: var(--green); }
+  @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ── Modal ── */
+  .modal-bg {
+    position: fixed; inset: 0; background: rgba(6,7,10,.72); backdrop-filter: blur(3px);
+    z-index: 1000; display: none; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-bg.aberto { display: flex; }
+  .modal-box {
+    background: var(--bg-raised); border: 1px solid var(--border); border-radius: var(--radius-lg);
+    padding: 26px; width: 100%; max-width: 440px; box-shadow: 0 30px 80px var(--shadow);
+  }
+  .modal-box h3 { font-family: var(--font-display); font-size: 16px; font-weight: 700; margin-bottom: 18px; }
+  .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 18px; }
+
+  /* ── Busca ── */
+  .search-row { display: flex; gap: 10px; margin-bottom: 18px; position: relative; }
+  .search-row { max-width: 320px; }
+  .search-row svg.icn {
+    position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--text-faint); width: 16px; height: 16px;
+  }
+  .search-row input { padding-left: 36px; }
+
+  .empty { color: var(--text-muted); text-align: center; padding: 44px 20px; font-size: 13.5px; }
+  .empty svg.icn { width: 28px; height: 28px; color: var(--text-faint); margin-bottom: 10px; }
+  .loading { color: var(--text-muted); padding: 20px; font-size: 13px; }
+
+  /* ── Mobile ── */
+  @media (max-width: 860px) {
+    .admin-layout { flex-direction: column; }
+    .sidebar {
+      position: fixed; top: auto; bottom: 0; left: 0; right: 0; width: 100%; height: auto;
+      flex-direction: row; align-items: stretch; justify-content: space-between;
+      padding: 6px calc(6px + env(safe-area-inset-left,0px)) calc(6px + env(safe-area-inset-bottom,0px)) calc(6px + env(safe-area-inset-right,0px));
+      border-right: none; border-top: 1px solid var(--border-soft);
+      z-index: 500; box-shadow: 0 -8px 24px var(--shadow); gap: 0;
+    }
+    .sidebar-logo { display: none; }
+    .nav-item {
+      flex-direction: column; gap: 4px; padding: 8px 4px; flex: 1; border-radius: var(--radius-sm);
+      font-size: 10.5px; text-align: center;
+    }
+    .nav-item.ativo { background: var(--accent-soft); }
+    .nav-icon { width: auto; }
+    .main { padding: 20px 16px calc(var(--nav-h) + 24px); }
+    .page-title { font-size: 18px; }
+    .cards-grid { grid-template-columns: 1fr; }
+    .form-row { grid-template-columns: 1fr; }
+    .search-row { max-width: none; }
+    .form-card { padding: 18px; }
+  }
+  @media (max-width: 420px) {
+    .login-box { padding: 32px 24px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Tela de login -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-mark">
+      <svg class="icn" viewBox="0 0 24 24"><path d="M12 2 4 5.5v6c0 5 3.4 8.9 8 10.5 4.6-1.6 8-5.5 8-10.5v-6L12 2Z"/><path d="m9 12 2 2 4-4"/></svg>
+    </div>
+    <h1>Painel Admin</h1>
+    <p>ChatDevs — acesso restrito</p>
+    <div class="form-group">
+      <label class="form-label">Chave de acesso</label>
+      <input type="password" id="login-key" placeholder="••••••••" onkeydown="if(event.key==='Enter')entrar()">
+    </div>
+    <button class="btn btn-accent btn-full" onclick="entrar()">
+      <svg class="icn" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M5 12h13M13 6l6 6-6 6"/></svg>
+      Entrar
+    </button>
+    <p id="login-erro" style="color:var(--red);font-size:12px;margin-top:12px;text-align:center"></p>
+  </div>
+</div>
+
+<!-- Painel principal -->
+<div id="admin-screen">
+  <div class="admin-layout">
+    <nav class="sidebar">
+      <div class="sidebar-logo">
+        <div class="sidebar-logo-mark">
+          <svg class="icn" viewBox="0 0 24 24"><path d="M12 2 4 5.5v6c0 5 3.4 8.9 8 10.5 4.6-1.6 8-5.5 8-10.5v-6L12 2Z"/></svg>
+        </div>
+        <div class="sidebar-logo-text">ChatDevs<span>Painel Admin</span></div>
+      </div>
+      <button class="nav-item ativo" onclick="irPara('novidades',this)">
+        <span class="nav-icon"><svg class="icn" viewBox="0 0 24 24"><path d="M3 11v2a2 2 0 0 0 2 2h1l3 5v-5h2l7 4V6l-7 4H6a2 2 0 0 0-2 2Z"/><path d="M18 9a3 3 0 0 1 0 6"/></svg></span>
+        Novidades
+      </button>
+      <button class="nav-item" onclick="irPara('grupos',this)">
+        <span class="nav-icon"><svg class="icn" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 19c.6-3.3 3.2-5.3 6.5-5.3s5.9 2 6.5 5.3"/><path d="M16.5 8.3a3 3 0 1 1 1.7 5.6"/><path d="M17.8 13.9c2.7.5 4.4 2.2 4.9 4.9"/></svg></span>
+        Grupos
+      </button>
+      <button class="nav-item" onclick="irPara('membros',this)">
+        <span class="nav-icon"><svg class="icn" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c.9-4.2 3.8-6.6 7.5-6.6s6.6 2.4 7.5 6.6"/></svg></span>
+        Membros
+      </button>
+      <button class="nav-item" onclick="irPara('admins',this)">
+        <span class="nav-icon"><svg class="icn" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 5l3 3M13 8l2.5 2.5"/></svg></span>
+        Admins
+      </button>
+    </nav>
+
+    <main class="main">
+
+      <!-- ══ NOVIDADES ══ -->
+      <div class="page ativo" id="page-novidades">
+        <div class="page-title">
+          <svg class="icn" viewBox="0 0 24 24"><path d="M3 11v2a2 2 0 0 0 2 2h1l3 5v-5h2l7 4V6l-7 4H6a2 2 0 0 0-2 2Z"/><path d="M18 9a3 3 0 0 1 0 6"/></svg>
+          Novidades
+        </div>
+        <div class="page-sub">Publique avisos e atualizações que aparecem na home do app.</div>
+
+        <div class="form-card">
+          <h3>Nova publicação</h3>
+          <div class="form-group">
+            <label class="form-label">Título *</label>
+            <input type="text" id="nov-titulo" placeholder="Ex: Nova versão disponível!">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Texto *</label>
+            <textarea id="nov-texto" placeholder="Descreva a novidade..."></textarea>
+          </div>
+          <div class="form-group">
+            <label class="form-label">URL da imagem (opcional)</label>
+            <input type="url" id="nov-img" placeholder="https://...">
+          </div>
+          <button class="btn btn-accent" onclick="criarNovidade()">
+            <svg class="icn" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M12 5v14M5 12h14"/></svg>
+            Publicar
+          </button>
+        </div>
+
+        <div id="novidades-lista" class="cards-grid">
+          <div class="loading">Carregando...</div>
+        </div>
+      </div>
+
+      <!-- ══ GRUPOS ══ -->
+      <div class="page" id="page-grupos">
+        <div class="page-title">
+          <svg class="icn" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 19c.6-3.3 3.2-5.3 6.5-5.3s5.9 2 6.5 5.3"/><path d="M16.5 8.3a3 3 0 1 1 1.7 5.6"/><path d="M17.8 13.9c2.7.5 4.4 2.2 4.9 4.9"/></svg>
+          Grupos
+        </div>
+        <div class="page-sub">Gerencie os grupos criados no ChatDevs.</div>
+        <div class="search-row">
+          <svg class="icn" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" id="busca-grupos" placeholder="Buscar por nome..." oninput="filtrarGrupos()">
+        </div>
+        <div class="table-wrap">
+          <table id="tabela-grupos">
+            <thead>
+              <tr>
+                <th>Grupo</th>
+                <th>Membros</th>
+                <th>Dono (email)</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="grupos-body">
+              <tr><td colspan="5" class="loading">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ══ MEMBROS ══ -->
+      <div class="page" id="page-membros">
+        <div class="page-title">
+          <svg class="icn" viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c.9-4.2 3.8-6.6 7.5-6.6s6.6 2.4 7.5 6.6"/></svg>
+          Membros
+        </div>
+        <div class="page-sub">Visualize e gerencie os usuários cadastrados.</div>
+        <div class="search-row">
+          <svg class="icn" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+          <input type="text" id="busca-membros" placeholder="Buscar por nome ou email..." oninput="filtrarMembros()">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Usuário</th>
+                <th>Email</th>
+                <th>Status</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody id="membros-body">
+              <tr><td colspan="4" class="loading">Carregando...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ══ ADMINS ══ -->
+      <div class="page" id="page-admins">
+        <div class="page-title">
+          <svg class="icn" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M16 5l3 3M13 8l2.5 2.5"/></svg>
+          Admins do Painel
+        </div>
+        <div class="page-sub">Defina quem tem acesso a este painel além de você.</div>
+
+        <div class="form-card">
+          <h3>Adicionar admin</h3>
+          <div style="display:flex;gap:10px;flex-wrap:wrap">
+            <input type="text" id="admin-busca" placeholder="Nome de usuário ou email" style="flex:1;min-width:180px">
+            <button class="btn btn-accent" onclick="adicionarAdmin()" style="white-space:nowrap">
+              <svg class="icn" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M12 5v14M5 12h14"/></svg>
+              Adicionar
+            </button>
+          </div>
+        </div>
+
+        <div id="admins-lista"></div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- Modal editar novidade -->
+<div class="modal-bg" id="modal-editar-nov">
+  <div class="modal-box">
+    <h3>Editar novidade</h3>
+    <input type="hidden" id="edit-nov-id">
+    <div class="form-group">
+      <label class="form-label">Título</label>
+      <input type="text" id="edit-nov-titulo">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Texto</label>
+      <textarea id="edit-nov-texto"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">URL da imagem</label>
+      <input type="url" id="edit-nov-img">
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-outline" onclick="fecharModal('modal-editar-nov')">Cancelar</button>
+      <button class="btn btn-accent" onclick="salvarEdicaoNovidade()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast"></div>
+
+<script>
+let ADMIN_KEY = '';
+let todosGrupos = [];
+let todosMembros = [];
+
+// ── Ícones reutilizáveis (SVG inline, feather-style) ────────────────────────
+const ICONS = {
+  imagem:  '<svg class="icn" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="m21 16-5-5-4 4-2-2-5 5"/></svg>',
+  editar:  '<svg class="icn" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>',
+  lixo:    '<svg class="icn" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/></svg>',
+  cadeadoF:'<svg class="icn" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/></svg>',
+  cadeadoA:'<svg class="icn" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="9.5" rx="2"/><path d="M8 10.5V7a4 4 0 0 1 7.5-2"/></svg>',
+  check:   '<svg class="icn" viewBox="0 0 24 24"><path d="m5 13 4 4 10-10"/></svg>',
+  bloq:    '<svg class="icn" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/></svg>',
+  vazio:   '<svg class="icn" viewBox="0 0 24 24"><path d="M4 19V7a2 2 0 0 1 2-2h5l2 2h5a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/></svg>',
+};
+function icon(nome) { return ICONS[nome] || ''; }
+
+// ── Auth ──────────────────────────────────────────────────────────────────
+function entrar() {
+  const key = document.getElementById('login-key').value.trim();
+  if (!key) return;
+  ADMIN_KEY = key;
+  // testa a chave buscando novidades
+  fetch('/api/admin/grupos', { headers: { 'x-admin-key': key } })
+    .then(r => {
+      if (!r.ok) { document.getElementById('login-erro').textContent = 'Chave incorreta.'; ADMIN_KEY = ''; return; }
+      document.getElementById('login-screen').style.display = 'none';
+      document.getElementById('admin-screen').style.display = 'block';
+      carregarTudo();
+    }).catch(() => { document.getElementById('login-erro').textContent = 'Erro de conexão.'; });
+}
+document.getElementById('login-key').addEventListener('keydown', e => { if (e.key === 'Enter') entrar(); });
+
+// ── Navegação ─────────────────────────────────────────────────────────────
+function irPara(pagina, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('ativo'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('ativo'));
+  document.getElementById('page-' + pagina).classList.add('ativo');
+  btn.classList.add('ativo');
+}
+
+function carregarTudo() {
+  carregarNovidades();
+  carregarGrupos();
+  carregarMembros();
+  carregarAdmins();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────
+function toast(msg, tipo = 'sucesso') {
+  const el = document.createElement('div');
+  el.className = 'toast-item ' + tipo;
+  el.textContent = msg;
+  document.getElementById('toast').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+function fecharModal(id) { document.getElementById(id).classList.remove('aberto'); }
+
+// ── NOVIDADES ─────────────────────────────────────────────────────────────
+async function carregarNovidades() {
+  const r = await fetch('/api/novidades');
+  const { novidades } = await r.json();
+  const lista = document.getElementById('novidades-lista');
+  if (!novidades.length) { lista.innerHTML = `<div class="empty">${icon('vazio')}<div>Nenhuma novidade publicada ainda.</div></div>`; return; }
+  lista.innerHTML = novidades.map(n => `
+    <div class="card" id="nov-${n.id}">
+      ${n.imageUrl ? `<img class="card-img" src="${esc(n.imageUrl)}" alt="" onerror="this.style.display='none'">` : `<div class="card-img-placeholder">${icon('imagem')}</div>`}
+      <div class="card-title">${esc(n.titulo)}</div>
+      <div class="card-text">${esc(n.texto)}</div>
+      <div class="card-meta">${new Date(n.criadaEm).toLocaleString('pt-BR')}</div>
+      <div class="card-actions">
+        <button class="btn btn-outline btn-sm" onclick="abrirEdicaoNovidade('${n.id}','${esc(n.titulo)}','${esc(n.texto)}','${esc(n.imageUrl||'')}')">${icon('editar')} Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="deletarNovidade('${n.id}')">${icon('lixo')} Apagar</button>
+      </div>
+    </div>`).join('');
+}
+
+async function criarNovidade() {
+  const titulo = document.getElementById('nov-titulo').value.trim();
+  const texto = document.getElementById('nov-texto').value.trim();
+  const imageUrl = document.getElementById('nov-img').value.trim();
+  if (!titulo || !texto) { toast('Título e texto são obrigatórios.', 'erro'); return; }
+  const r = await fetch('/api/admin/novidades', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ titulo, texto, imageUrl })
+  });
+  if (!r.ok) { toast('Erro ao criar.', 'erro'); return; }
+  document.getElementById('nov-titulo').value = '';
+  document.getElementById('nov-texto').value = '';
+  document.getElementById('nov-img').value = '';
+  toast('Novidade publicada!');
+  carregarNovidades();
+}
+
+function abrirEdicaoNovidade(id, titulo, texto, img) {
+  document.getElementById('edit-nov-id').value = id;
+  document.getElementById('edit-nov-titulo').value = titulo;
+  document.getElementById('edit-nov-texto').value = texto;
+  document.getElementById('edit-nov-img').value = img;
+  document.getElementById('modal-editar-nov').classList.add('aberto');
+}
+
+async function salvarEdicaoNovidade() {
+  const id = document.getElementById('edit-nov-id').value;
+  const titulo = document.getElementById('edit-nov-titulo').value.trim();
+  const texto = document.getElementById('edit-nov-texto').value.trim();
+  const imageUrl = document.getElementById('edit-nov-img').value.trim();
+  const r = await fetch('/api/admin/novidades/' + id, {
+    method: 'PUT', headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+    body: JSON.stringify({ titulo, texto, imageUrl })
+  });
+  if (!r.ok) { toast('Erro ao salvar.', 'erro'); return; }
+  fecharModal('modal-editar-nov');
+  toast('Novidade atualizada!');
+  carregarNovidades();
+}
+
+async function deletarNovidade(id) {
+  if (!confirm('Apagar esta novidade?')) return;
+  await fetch('/api/admin/novidades/' + id, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
+  toast('Apagada.');
+  carregarNovidades();
+}
+
+// ── GRUPOS ────────────────────────────────────────────────────────────────
+async function carregarGrupos() {
+  const r = await fetch('/api/admin/grupos', { headers: { 'x-admin-key': ADMIN_KEY } });
+  const { grupos } = await r.json();
+  todosGrupos = grupos;
+  renderGrupos(grupos);
+}
+
+function renderGrupos(grupos) {
+  const tbody = document.getElementById('grupos-body');
+  if (!grupos.length) { tbody.innerHTML = `<tr><td colspan="5" class="empty">${icon('vazio')}<div>Nenhum grupo ainda.</div></td></tr>`; return; }
+  tbody.innerHTML = grupos.map(g => `
+    <tr id="grupo-${g.id}">
+      <td>
+        <div class="user-cell">
+          ${g.photoUrl ? `<img class="avatar-sm" src="${esc(g.photoUrl)}" alt="">` : `<div class="avatar-sm">${esc(g.name[0].toUpperCase())}</div>`}
+          <div>
+            <div style="font-weight:600">${esc(g.name)}</div>
+            ${g.description ? `<div style="font-size:11px;color:var(--text-muted)">${esc(g.description.slice(0,40))}${g.description.length>40?'…':''}</div>` : ''}
+          </div>
+        </div>
+      </td>
+      <td>${g.membros}</td>
+      <td style="font-size:12px;color:var(--text-muted)">${esc(g.emailDono)}</td>
+      <td><span class="tag ${g.trancado ? 'tag-trancado' : 'tag-aberto'}">${g.trancado ? icon('cadeadoF') : icon('cadeadoA')} ${g.trancado ? 'Trancado' : 'Aberto'}</span></td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" onclick="trancarGrupo('${g.id}',${g.trancado})">${g.trancado ? icon('cadeadoA') : icon('cadeadoF')} ${g.trancado ? 'Abrir' : 'Trancar'}</button>
+          <button class="btn btn-danger btn-sm" onclick="deletarGrupo('${g.id}','${esc(g.name)}')">${icon('lixo')}</button>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+function filtrarGrupos() {
+  const q = document.getElementById('busca-grupos').value.toLowerCase();
+  renderGrupos(todosGrupos.filter(g => g.name.toLowerCase().includes(q) || g.emailDono.toLowerCase().includes(q)));
+}
+
+async function trancarGrupo(id, trancado) {
+  const r = await fetch('/api/admin/grupos/' + id + '/trancar', { method: 'POST', headers: { 'x-admin-key': ADMIN_KEY } });
+  if (!r.ok) { toast('Erro.', 'erro'); return; }
+  toast(trancado ? 'Grupo aberto!' : 'Grupo trancado!');
+  carregarGrupos();
+}
+
+async function deletarGrupo(id, nome) {
+  if (!confirm(`Apagar o grupo "${nome}" e todas as mensagens? Isso é irreversível.`)) return;
+  await fetch('/api/admin/grupos/' + id, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
+  toast('Grupo apagado.');
+  carregarGrupos();
+}
+
+// ── MEMBROS ───────────────────────────────────────────────────────────────
+async function carregarMembros() {
+  const r = await fetch('/api/admin/membros', { headers: { 'x-admin-key': ADMIN_KEY } });
+  const { membros } = await r.json();
+  todosMembros = membros;
+  renderMembros(membros);
+}
+
+function renderMembros(membros) {
+  const tbody = document.getElementById('membros-body');
+  if (!membros.length) { tbody.innerHTML = `<tr><td colspan="4" class="empty">${icon('vazio')}<div>Nenhum membro ainda.</div></td></tr>`; return; }
+  tbody.innerHTML = membros.map(m => `
+    <tr id="membro-${m.id}">
+      <td>
+        <div class="user-cell">
+          ${m.photoUrl ? `<img class="avatar-sm" src="${esc(m.photoUrl)}" alt="">` : `<div class="avatar-sm">${esc(m.username[0].toUpperCase())}</div>`}
+          <span style="font-weight:500">${esc(m.username)}</span>
+        </div>
+      </td>
+      <td style="font-size:12px;color:var(--text-muted)">${esc(m.email)}</td>
+      <td><span class="tag ${m.bloqueado ? 'tag-bloq' : 'tag-ativo'}">${m.bloqueado ? icon('bloq') : icon('check')} ${m.bloqueado ? 'Bloqueado' : 'Ativo'}</span></td>
+      <td>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-outline btn-sm" onclick="bloquearMembro('${m.id}',${m.bloqueado})">${m.bloqueado ? icon('check') : icon('bloq')} ${m.bloqueado ? 'Desbloquear' : 'Bloquear'}</button>
+          <button class="btn btn-danger btn-sm" onclick="deletarMembro('${m.id}','${esc(m.username)}')">${icon('lixo')}</button>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+function filtrarMembros() {
+  const q = document.getElementById('busca-membros').value.toLowerCase();
+  renderMembros(todosMembros.filter(m => m.username.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)));
+}
+
+async function bloquearMembro(id, bloqueado) {
+  const r = await fetch('/api/admin/membros/' + id + '/bloquear', { method: 'POST', headers: { 'x-admin-key': ADMIN_KEY } });
+  if (!r.ok) { toast('Erro.', 'erro'); return; }
+  toast(bloqueado ? 'Usuário desbloqueado!' : 'Usuário bloqueado!');
+  carregarMembros();
+}
+
+async function deletarMembro(id, nome) {
+  if (!confirm(`Apagar o usuário "${nome}" permanentemente?`)) return;
+  await fetch('/api/admin/membros/' + id, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
+  toast('Usuário removido.');
+  carregarMembros();
+}
+
+// ── ADMINS ────────────────────────────────────────────────────────────────
+async function carregarAdmins() {
+  const r = await fetch('/api/admin/admins', { headers: { 'x-admin-key': ADMIN_KEY } });
+  const { admins } = await r.json();
+  const el = document.getElementById('admins-lista');
+  if (!admins.length) { el.innerHTML = `<div class="empty">${icon('vazio')}<div>Nenhum admin adicionado ainda.</div></div>`; return; }
+  el.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Usuário</th><th>Email</th><th></th></tr></thead><tbody>` +
+    admins.map(a => `
+      <tr>
+        <td>
+          <div class="user-cell">
+            ${a.photoUrl ? `<img class="avatar-sm" src="${esc(a.photoUrl)}" alt="">` : `<div class="avatar-sm">${esc(a.username[0].toUpperCase())}</div>`}
+            <span style="font-weight:500">${esc(a.username)}</span>
+          </div>
+        </td>
+        <td style="font-size:12px;color:var(--text-muted)">${esc(a.email)}</td>
+        <td><button class="btn btn-danger btn-sm" onclick="removerAdmin('${a.id}','${esc(a.username)}')">${icon('lixo')} Remover</button></td>
+      </tr>`).join('') +
+  `</tbody></table></div>`;
+}
+
+async function adicionarAdmin() {
+  const q = document.getElementById('admin-busca').value.trim();
+  if (!q) return;
+  const r = await fetch('/api/admin/buscar-usuario?q=' + encodeURIComponent(q), { headers: { 'x-admin-key': ADMIN_KEY } });
+  if (!r.ok) { toast('Usuário não encontrado.', 'erro'); return; }
+  const u = await r.json();
+  const r2 = await fetch('/api/admin/admins/' + u.id, { method: 'POST', headers: { 'x-admin-key': ADMIN_KEY } });
+  if (!r2.ok) { toast('Erro ao adicionar.', 'erro'); return; }
+  document.getElementById('admin-busca').value = '';
+  toast(u.username + ' virou admin!');
+  carregarAdmins();
+}
+
+async function removerAdmin(id, nome) {
+  if (!confirm(`Remover ${nome} dos admins?`)) return;
+  await fetch('/api/admin/admins/' + id, { method: 'DELETE', headers: { 'x-admin-key': ADMIN_KEY } });
+  toast('Admin removido.');
+  carregarAdmins();
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────
+function esc(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// Fechar modais clicando fora
+document.querySelectorAll('.modal-bg').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('aberto'); });
+});
+</script>
+</body>
+</html>
