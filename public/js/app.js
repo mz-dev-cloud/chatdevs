@@ -939,6 +939,7 @@ async function abrirChat(chatId, nome, tipo, outroId, outroEmail, removidoDoGrup
   mostrarPainelMobile();
   renderContatoBanner();
   renderMenuChatAtual();
+  aplicarAparenciaChat();
   aplicarModoSomenteLeitura();
 
   socket.emit('join_chat', chatId); // se for fantasma, o servidor ignora isso e não recebe mensagem nova
@@ -1081,19 +1082,93 @@ function renderMenuChatAtual() {
   if (!chatAtualId) { el.innerHTML = ''; return; }
 
   if (chatAtualRemovido) {
-    el.innerHTML = `<div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId, true)">Apagar conversa</div>`;
+    el.innerHTML = `<div class="dropdown-item dropdown-clicavel" onclick="abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i> Aparência do chat</div><div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId, true)">Apagar conversa</div>`;
     return;
   }
 
   const ehAutoConversa = chatAtualOutro && chatAtualOutro.id === usuarioAtual.id;
 
   el.innerHTML = chatAtualTipo === 'group'
-    ? `<div class="dropdown-item dropdown-clicavel" onclick="abrirConfigGrupo(chatAtualId)">Configurações do grupo</div>
+    ? `<div class="dropdown-item dropdown-clicavel" onclick="abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i> Aparência do chat</div>
+       <div class="dropdown-item dropdown-clicavel" onclick="abrirConfigGrupo(chatAtualId)">Configurações do grupo</div>
        <div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId)">Apagar conversa</div>
        <div class="dropdown-item dropdown-clicavel" onclick="sairDoGrupo(chatAtualId)">Sair do grupo</div>`
-    : `<div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId)">Apagar conversa</div>
+    : `<div class="dropdown-item dropdown-clicavel" onclick="abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i> Aparência do chat</div>
+       <div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId)">Apagar conversa</div>
        ${ehAutoConversa ? '' : `<div class="dropdown-item dropdown-clicavel" onclick="bloquearUsuario(chatAtualOutro && chatAtualOutro.id, chatAtualId)">Bloquear usuário</div>`}`;
 }
+
+// ---------- Personalização visual da conversa ----------
+const CHAT_APPEAR_KEY = 'chatdevs_aparencia_conversa_v1';
+function lerAparenciaChat() {
+  try { return Object.assign({ cor: '#ffb454', opacidade: 92, estilo: 'suave', wallpaper: '' }, JSON.parse(localStorage.getItem(CHAT_APPEAR_KEY) || '{}')); }
+  catch (_) { return { cor: '#ffb454', opacidade: 92, estilo: 'suave', wallpaper: '' }; }
+}
+function salvarAparenciaChat(cfg) {
+  localStorage.setItem(CHAT_APPEAR_KEY, JSON.stringify(cfg));
+  aplicarAparenciaChat();
+}
+function aplicarAparenciaChat() {
+  const cfg = lerAparenciaChat();
+  const mensagens = document.getElementById('mensagens');
+  if (!mensagens) return;
+  mensagens.style.setProperty('--chat-bubble-color', cfg.cor);
+  mensagens.style.setProperty('--chat-bubble-opacity', `${Math.max(20, Math.min(100, Number(cfg.opacidade) || 92))}%`);
+  mensagens.dataset.bubbleStyle = cfg.estilo || 'suave';
+  if (cfg.wallpaper) {
+    mensagens.style.setProperty('--chat-wallpaper-image', `url("${cfg.wallpaper}")`);
+    mensagens.classList.add('com-wallpaper');
+  } else {
+    mensagens.style.removeProperty('--chat-wallpaper-image');
+    mensagens.classList.remove('com-wallpaper');
+  }
+}
+function abrirAparenciaChat() {
+  document.querySelectorAll('.dropdown-menu').forEach(el => el.classList.add('oculto'));
+  const cfg = lerAparenciaChat();
+  const root = document.getElementById('modal-root');
+  if (!root) return;
+  const anterior = document.getElementById('modal-aparencia-chat'); if (anterior) anterior.remove();
+  const modal = document.createElement('div');
+  modal.id = 'modal-aparencia-chat'; modal.className = 'chat-appearance-backdrop';
+  modal.innerHTML = `
+    <section class="chat-appearance-panel" role="dialog" aria-modal="true" aria-labelledby="appearance-title">
+      <header class="appearance-head"><div><span class="appearance-eyebrow">PERSONALIZAÇÃO</span><h2 id="appearance-title">A aparência do seu chat</h2><p>Deixe a conversa com a sua identidade.</p></div><button type="button" class="appearance-close" aria-label="Fechar" data-close>×</button></header>
+      <div class="appearance-content">
+        <label class="appearance-label" for="bubble-color">Cor das bolhas</label>
+        <div class="appearance-color-row"><input id="bubble-color" type="color" value="${cfg.cor}"><div class="appearance-swatches">${['#ffb454','#8b5cf6','#38bdf8','#34d399','#fb7185','#f1f5f9'].map(c=>`<button type="button" class="appearance-swatch" data-color="${c}" style="--swatch:${c}" aria-label="Cor ${c}"></button>`).join('')}</div></div>
+        <div class="appearance-range-head"><label class="appearance-label" for="bubble-opacity">Opacidade das bolhas</label><output id="bubble-opacity-value">${cfg.opacidade}%</output></div>
+        <input class="appearance-range" id="bubble-opacity" type="range" min="20" max="100" step="5" value="${cfg.opacidade}">
+        <label class="appearance-label">Estilo das bolhas</label><div class="appearance-styles"><button type="button" data-style="suave" class="appearance-style ${cfg.estilo==='suave'?'selected':''}"><span class="style-preview style-soft"></span><b>Suave</b><small>Arredondado</small></button><button type="button" data-style="compacto" class="appearance-style ${cfg.estilo==='compacto'?'selected':''}"><span class="style-preview style-compact"></span><b>Compacto</b><small>Mais discreto</small></button><button type="button" data-style="vidro" class="appearance-style ${cfg.estilo==='vidro'?'selected':''}"><span class="style-preview style-glass"></span><b>Vidro</b><small>Translúcido</small></button></div>
+        <label class="appearance-label">Papel de parede</label><div class="wallpaper-actions"><button type="button" class="appearance-upload" id="appearance-upload"><i class="mdi mdi-image-plus-outline"></i><span><b>Escolher imagem</b><small>Use uma imagem do seu dispositivo</small></span><i class="mdi mdi-chevron-right"></i></button><input type="file" id="appearance-wallpaper-file" accept="image/*" hidden><button type="button" class="appearance-remove" id="appearance-remove" ${cfg.wallpaper?'':'disabled'}><i class="mdi mdi-image-remove-outline"></i> Remover imagem e voltar ao fundo padrão</button></div>
+      </div><footer class="appearance-footer"><button type="button" class="appearance-reset" id="appearance-reset">Restaurar padrão</button><button type="button" class="appearance-done" data-close>Aplicar alterações</button></footer>
+    </section>`;
+  root.appendChild(modal);
+  const color = modal.querySelector('#bubble-color'), opacity = modal.querySelector('#bubble-opacity');
+  const update = () => { const next = {...lerAparenciaChat(), cor: color.value, opacidade: Number(opacity.value)}; modal.querySelector('#bubble-opacity-value').textContent = `${opacity.value}%`; salvarAparenciaChat(next); };
+  color.addEventListener('input', update); opacity.addEventListener('input', update);
+  modal.querySelectorAll('[data-color]').forEach(b=>b.addEventListener('click',()=>{color.value=b.dataset.color;update();}));
+  modal.querySelectorAll('[data-style]').forEach(b=>b.addEventListener('click',()=>{modal.querySelectorAll('[data-style]').forEach(x=>x.classList.toggle('selected',x===b));salvarAparenciaChat({...lerAparenciaChat(),estilo:b.dataset.style});}));
+  modal.querySelector('#appearance-upload').addEventListener('click',()=>modal.querySelector('#appearance-wallpaper-file').click());
+  modal.querySelector('#appearance-wallpaper-file').addEventListener('change', async e=>{
+    const file=e.target.files && e.target.files[0]; if(!file)return;
+    if(!file.type.startsWith('image/')){mostrarAviso('Escolha um arquivo de imagem.');return;}
+    if(file.size>12*1024*1024){mostrarAviso('A imagem deve ter no máximo 12 MB.');return;}
+    try {
+      const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});
+      const img=await new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=reject;im.src=data;});
+      const scale=Math.min(1,1600/Math.max(img.width,img.height)); const canvas=document.createElement('canvas');canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+      const wallpaper=canvas.toDataURL('image/jpeg',0.82); const next={...lerAparenciaChat(),wallpaper};
+      try{localStorage.setItem(CHAT_APPEAR_KEY,JSON.stringify(next));}catch(_){mostrarAviso('Imagem muito grande para salvar neste dispositivo. Escolha uma imagem menor.');return;}
+      aplicarAparenciaChat();modal.querySelector('#appearance-remove').disabled=false;mostrarAviso('Papel de parede aplicado neste dispositivo.','sucesso');
+    }catch(_){mostrarAviso('Não foi possível carregar essa imagem.');}
+  });
+  modal.querySelector('#appearance-remove').addEventListener('click',()=>{salvarAparenciaChat({...lerAparenciaChat(),wallpaper:''});modal.querySelector('#appearance-remove').disabled=true;});
+  modal.querySelector('#appearance-reset').addEventListener('click',()=>{salvarAparenciaChat({cor:'#ffb454',opacidade:92,estilo:'suave',wallpaper:''});modal.remove();abrirAparenciaChat();});
+  modal.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>modal.remove()));
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+}
+document.addEventListener('DOMContentLoaded', aplicarAparenciaChat);
 
 // ---------- Configurações do grupo (dono/admin, remover pessoas) ----------
 async function abrirConfigGrupo(chatId) {
