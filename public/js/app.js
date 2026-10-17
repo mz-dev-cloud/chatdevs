@@ -357,7 +357,12 @@ function alternarDropdown(id) {
   document.querySelectorAll('.dropdown-menu').forEach(el => {
     if (el.id !== id) el.classList.add('oculto');
   });
-  document.getElementById(id).classList.toggle('oculto');
+  const menu = document.getElementById(id);
+  if (!menu) return;
+  const abrir = menu.classList.contains('oculto');
+  menu.classList.toggle('oculto', !abrir);
+  const trigger = menu.closest('.dropdown-wrap')?.querySelector('button');
+  if (trigger) trigger.setAttribute('aria-expanded', String(abrir));
 }
 document.addEventListener('click', e => {
   if (!e.target.closest('.dropdown-wrap')) {
@@ -919,6 +924,28 @@ async function abrirNovoGrupo() {
   carregarStats();
 }
 
+// Status do cabeçalho: usa apenas presença/último acesso quando a API fornece esses dados.
+function atualizarStatusCabecalho(contato, tipo) {
+  const el = document.getElementById('chat-header-status');
+  if (!el) return;
+  el.classList.remove('is-online');
+  if (tipo === 'group') { el.textContent = 'Grupo'; return; }
+  if (!contato) { el.textContent = 'Status indisponível'; return; }
+  const online = contato.online === true || contato.isOnline === true || contato.is_online === true;
+  const ultimo = contato.lastSeen || contato.last_seen || contato.lastSeenAt || contato.last_seen_at || contato.lastActiveAt;
+  if (online) { el.textContent = 'Online'; el.classList.add('is-online'); return; }
+  if (ultimo) {
+    const d = new Date(ultimo);
+    if (!Number.isNaN(d.getTime())) {
+      const hora = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(d);
+      const data = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
+      el.textContent = `Visto por último ${hora} • ${data}`;
+      return;
+    }
+  }
+  el.textContent = 'Status indisponível';
+}
+
 // ---------- Abrir um chat ----------
 async function abrirChat(chatId, nome, tipo, outroId, outroEmail, removidoDoGrupo, photoUrl) {
   chatAtualId = chatId;
@@ -934,6 +961,7 @@ async function abrirChat(chatId, nome, tipo, outroId, outroEmail, removidoDoGrup
 
   document.getElementById('chat-header-nome').textContent = nome;
   document.getElementById('chat-header-avatar').innerHTML = avatarInnerHtml(nome, photoUrl || null);
+  atualizarStatusCabecalho(chatAtualOutro, chatAtualTipo);
   document.getElementById('home-view').classList.add('oculto');
   document.getElementById('chat-view').classList.remove('oculto');
   mostrarPainelMobile();
@@ -1082,18 +1110,18 @@ function renderMenuChatAtual() {
   if (!chatAtualId) { el.innerHTML = ''; return; }
 
   if (chatAtualRemovido) {
-    el.innerHTML = `<div class="dropdown-item dropdown-clicavel" onclick="abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i> Aparência do chat</div><div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId, true)">Apagar conversa</div>`;
+    el.innerHTML = `<div class="dropdown-item dropdown-clicavel" onclick="document.getElementById('menu-chat-atual').classList.add('oculto'); document.querySelector('.chat-options-trigger')?.setAttribute('aria-expanded','false'); abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i> Aparência do chat</div><div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId, true)">Apagar conversa</div>`;
     return;
   }
 
   const ehAutoConversa = chatAtualOutro && chatAtualOutro.id === usuarioAtual.id;
 
   el.innerHTML = chatAtualTipo === 'group'
-    ? `<div class="dropdown-item dropdown-clicavel" onclick="abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i> Aparência do chat</div>
+    ? `<div class="dropdown-item dropdown-clicavel" onclick="document.getElementById('menu-chat-atual').classList.add('oculto'); document.querySelector('.chat-options-trigger')?.setAttribute('aria-expanded','false'); abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i> Aparência do chat</div>
        <div class="dropdown-item dropdown-clicavel" onclick="abrirConfigGrupo(chatAtualId)">Configurações do grupo</div>
        <div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId)">Apagar conversa</div>
        <div class="dropdown-item dropdown-clicavel" onclick="sairDoGrupo(chatAtualId)">Sair do grupo</div>`
-    : `<div class="dropdown-item dropdown-clicavel" onclick="abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i> Aparência do chat</div>
+    : `<div class="dropdown-item dropdown-clicavel" onclick="document.getElementById('menu-chat-atual').classList.add('oculto'); document.querySelector('.chat-options-trigger')?.setAttribute('aria-expanded','false'); abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i> Aparência do chat</div>
        <div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId)">Apagar conversa</div>
        ${ehAutoConversa ? '' : `<div class="dropdown-item dropdown-clicavel" onclick="bloquearUsuario(chatAtualOutro && chatAtualOutro.id, chatAtualId)">Bloquear usuário</div>`}`;
 }
