@@ -2797,7 +2797,7 @@ async function abrirPerfilUsuario(userId) {
   const fotoHtml = u.photoUrl
     ? `<img class="perfil-foto-grande" style="border-color:${escapeAttr(ring)}" src="${escapeAttr(u.photoUrl)}" alt="Foto de ${escapeAttr(u.username)}" onclick="window.open('${escapeAttr(u.photoUrl)}','_blank')" title="Ver foto em tamanho grande">`
     : `<div class="avatar-circle avatar-circle--lg perfil-editor-avatar" style="border-color:${escapeAttr(ring)}">${avatarInnerHtml(u.username, null)}</div>`;
-  const bioHtml = u.bio ? `<p class="perfil-bio">${escapeHtml(u.bio)}</p>` : `<p class="perfil-bio perfil-bio--vazia">Sem bio.</p>`;
+  const bioHtml = u.bio ? `<div class="perfil-bio-card"><span class="perfil-bio-aspas perfil-bio-aspas--abre" aria-hidden="true">“</span><p class="perfil-bio">${escapeHtml(u.bio)}</p><span class="perfil-bio-aspas perfil-bio-aspas--fecha" aria-hidden="true">”</span></div>` : `<div class="perfil-bio-card perfil-bio-card--vazia"><span class="perfil-bio-aspas perfil-bio-aspas--abre" aria-hidden="true">“</span><p class="perfil-bio perfil-bio--vazia">Sem bio.</p><span class="perfil-bio-aspas perfil-bio-aspas--fecha" aria-hidden="true">”</span></div>`;
   const redes = Array.isArray(u.socials) ? u.socials : [];
   const bases = { instagram: 'https://www.instagram.com/', tiktok: 'https://www.tiktok.com/@', youtube: 'https://www.youtube.com/@', facebook: 'https://www.facebook.com/', x: 'https://x.com/' };
   const nomes = { instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', facebook: 'Facebook', x: 'X' };
