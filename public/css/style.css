@@ -3854,7 +3854,7 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
   min-width: 0 !important;
   height: auto !important;
   min-height: 0 !important;
-  padding: 10px 12px 7px !important;
+  padding: 7px 10px 5px !important;
   display: block !important;
   overflow: visible !important;
 }
@@ -3879,8 +3879,8 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
   flex-direction: row !important;
   align-items: center !important;
   justify-content: flex-start !important;
-  gap: 10px !important;
-  width: min(270px, 68vw) !important;
+  gap: 8px !important;
+  width: min(250px, 66vw) !important;
   min-width: 0 !important;
   max-width: 100% !important;
   height: auto !important;
@@ -3897,13 +3897,13 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
 .msg .audio-player .audio-btn {
   position: static !important;
   inset: auto !important;
-  flex: 0 0 42px !important;
-  width: 42px !important;
-  min-width: 42px !important;
-  max-width: 42px !important;
-  height: 42px !important;
-  min-height: 42px !important;
-  max-height: 42px !important;
+  flex: 0 0 34px !important;
+  width: 34px !important;
+  min-width: 34px !important;
+  max-width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  max-height: 34px !important;
   margin: 0 !important;
   padding: 0 !important;
   border: 0 !important;
@@ -3927,7 +3927,7 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
   flex: 1 1 auto !important;
   flex-direction: column !important;
   justify-content: center !important;
-  gap: 5px !important;
+  gap: 2px !important;
   width: auto !important;
   min-width: 0 !important;
   height: auto !important;
@@ -3943,9 +3943,9 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
   justify-content: space-between !important;
   gap: 2px !important;
   width: 100% !important;
-  height: 28px !important;
-  min-height: 28px !important;
-  max-height: 28px !important;
+  height: 18px !important;
+  min-height: 18px !important;
+  max-height: 18px !important;
   margin: 0 !important;
   padding: 0 !important;
   overflow: hidden !important;
@@ -3973,11 +3973,11 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
   gap: 8px !important;
   width: 100% !important;
   height: auto !important;
-  min-height: 14px !important;
+  min-height: 12px !important;
   margin: 0 !important;
   padding: 0 !important;
 }
-.msg .audio-player .audio-tempo { font-size: 11px !important; line-height: 1.2 !important; }
+.msg .audio-player .audio-tempo { font-size: 10px !important; line-height: 1.1 !important; }
 .msg .audio-player .audio-velocidade {
   position: static !important;
   flex: 0 0 auto !important;
@@ -3995,5 +3995,5 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
 .msg:has(.audio-player) .hora { margin-top: 4px !important; }
 @media (max-width: 480px) {
   .msg:has(.audio-player) { max-width: 88% !important; }
-  .msg .audio-player { width: min(255px, 66vw) !important; }
+  .msg .audio-player { width: min(235px, 64vw) !important; }
 }
