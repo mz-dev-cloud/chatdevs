@@ -24,14 +24,13 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 app.use(express.static(path.join(__dirname, 'public')));
-const UPLOADS_DIR = path.join(__dirname, 'uploads');
-fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-app.use('/uploads', express.static(UPLOADS_DIR));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ---------- Upload de mídia (áudio/vídeo) ----------
+fs.mkdirSync(path.join(__dirname, 'uploads'), { recursive: true });
 const upload = multer({
   storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, UPLOADS_DIR),
+    destination: (req, file, cb) => cb(null, path.join(__dirname, 'uploads')),
     filename: (req, file, cb) => {
       const ext = path.extname(file.originalname) || '';
       cb(null, uuidv4() + ext);
@@ -40,16 +39,15 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 } // 25MB
 });
 
-app.post('/api/upload', (req, res) => {
-  upload.single('file')(req, res, err => {
-    if (err) {
-      const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
-      return res.status(status).json({ error: status === 413 ? 'Arquivo excede o limite de 25 MB.' : 'Falha ao receber o arquivo.' });
-    }
-    if (!req.file || !req.file.filename || !req.file.size) {
-      return res.status(400).json({ error: 'Nenhum arquivo válido foi enviado.' });
-    }
-    return res.json({ url: '/uploads/' + req.file.filename, filename: req.file.filename, size: req.file.size, mimeType: req.file.mimetype });
+app.post('/api/upload', upload.single('file'), (req, res) => {
+  if (!req.file || !req.file.filename || !req.file.size) {
+    return res.status(400).json({ error: 'O arquivo não foi recebido corretamente.' });
+  }
+  res.status(201).json({
+    url: '/uploads/' + req.file.filename,
+    filename: req.file.filename,
+    size: req.file.size,
+    mimeType: req.file.mimetype || 'application/octet-stream'
   });
 });
 
@@ -61,7 +59,22 @@ function getClientIp(req) {
 }
 
 function publicUser(u) {
-  return { id: u.id, username: u.username, email: u.email, photoUrl: u.photoUrl || null };
+  return {
+    id: u.id, username: u.username, email: u.email, photoUrl: u.photoUrl || null,
+    bio: u.bio || '', phone: u.phone || '', ringColor: u.ringColor || '#ffb454',
+    socials: Array.isArray(u.socials) ? u.socials : []
+  };
+}
+
+const SOCIALS_PERMITIDAS = new Set(['instagram', 'tiktok', 'youtube', 'facebook', 'x']);
+function normalizarSocials(socials) {
+  if (!Array.isArray(socials)) return [];
+  return socials.slice(0, 5).map(item => {
+    const network = String(item && item.network || '').toLowerCase();
+    const handle = String(item && item.handle || '').trim().replace(/^@+/, '').slice(0, 100);
+    if (!SOCIALS_PERMITIDAS.has(network) || !handle) return null;
+    return { network, handle };
+  }).filter(Boolean);
 }
 
 function findUserByEmailOrUsername(db, query) {
@@ -281,6 +294,24 @@ app.post('/api/users/:userId/photo', (req, res) => {
   res.json({ ok: true, user: publicUser(user) });
 });
 
+// ---------- Atualizar campos do perfil próprio ----------
+app.post('/api/users/:userId/profile', (req, res) => {
+  const { userId } = req.params;
+  if (req.body.userId !== userId) return res.status(403).json({ error: 'Você só pode editar seu próprio perfil.' });
+  const db = loadDB();
+  const user = db.users.find(u => u.id === userId);
+  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+  const bio = String(req.body.bio || '').trim().slice(0, 240);
+  const phone = String(req.body.phone || '').trim().slice(0, 30);
+  const ringColor = /^#[0-9a-fA-F]{6}$/.test(String(req.body.ringColor || '')) ? req.body.ringColor : '#ffb454';
+  user.bio = bio;
+  user.phone = phone;
+  user.ringColor = ringColor;
+  user.socials = normalizarSocials(req.body.socials);
+  saveDB(db);
+  res.json({ ok: true, user: publicUser(user) });
+});
+
 // ---------- Buscar usuário (pra iniciar conversa) ----------
 app.get('/api/find-user', (req, res) => {
   const { query, viewerId } = req.query;
@@ -328,7 +359,11 @@ app.get('/api/users/:userId/public', (req, res) => {
   res.json({
     id: user.id,
     username: user.username,
-    photoUrl: fotoParaViewer(db, user, viewerId)
+    photoUrl: fotoParaViewer(db, user, viewerId),
+    bio: user.bio || '',
+    phone: user.phone || '',
+    ringColor: user.ringColor || '#ffb454',
+    socials: normalizarSocials(user.socials)
   });
 });
 
