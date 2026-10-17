@@ -4128,3 +4128,118 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
 @media (prefers-reduced-motion: reduce) {
   .lista-chats > .item-chat { animation: none !important; transition: none !important; }
 }
+
+
+/* Correção de regressão: player de áudio compacto e wallpaper estável no mobile. */
+#mensagens {
+  position: relative !important;
+  isolation: isolate !important;
+  background-color: var(--bg, #0b0d12) !important;
+  background-attachment: scroll !important;
+}
+#mensagens.com-wallpaper::before {
+  position: absolute !important;
+  inset: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  transform: none !important;
+}
+#mensagens .msg:has(.audio-player) {
+  display: block !important;
+  box-sizing: border-box !important;
+  width: fit-content !important;
+  max-width: min(82%, 310px) !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 8px 10px 6px !important;
+  overflow: hidden !important;
+}
+#mensagens .msg:has(.audio-player) .conteudo {
+  display: block !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+#mensagens .msg .audio-player {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  box-sizing: border-box !important;
+  width: min(270px, 68vw) !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  gap: 10px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+#mensagens .msg .audio-player .audio-btn {
+  flex: 0 0 42px !important;
+  width: 42px !important;
+  min-width: 42px !important;
+  max-width: 42px !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  max-height: 42px !important;
+}
+#mensagens .msg .audio-player .audio-icone {
+  width: 20px !important;
+  height: 20px !important;
+}
+#mensagens .msg .audio-player .audio-meio {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  height: auto !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+}
+#mensagens .msg .audio-player .audio-onda {
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  height: 25px !important;
+  min-height: 25px !important;
+  max-height: 25px !important;
+  gap: 2px !important;
+  overflow: hidden !important;
+}
+#mensagens .msg .audio-player .audio-barra {
+  flex: 1 1 2px !important;
+  min-width: 2px !important;
+  max-width: 4px !important;
+  border-radius: 3px !important;
+}
+#mensagens .msg .audio-player .audio-rodape {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  min-height: 16px !important;
+  margin: 0 !important;
+  gap: 6px !important;
+}
+#mensagens .msg .audio-player .audio-tempo,
+#mensagens .msg .audio-player .audio-velocidade {
+  font-size: 12px !important;
+  line-height: 1.15 !important;
+}
+#mensagens .msg .audio-player .audio-velocidade {
+  flex: 0 0 auto !important;
+  padding: 2px 7px !important;
+}
+#mensagens .msg .audio-player > audio { display: none !important; }
+@media (max-width: 600px) {
+  #mensagens .msg:has(.audio-player) { max-width: min(84%, 300px) !important; }
+  #mensagens .msg .audio-player { width: min(250px, 66vw) !important; }
+  #mensagens.com-wallpaper::before { background-position: center center !important; }
+}
