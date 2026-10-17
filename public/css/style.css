@@ -4243,3 +4243,108 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
   #mensagens .msg .audio-player { width: min(250px, 66vw) !important; }
   #mensagens.com-wallpaper::before { background-position: center center !important; }
 }
+
+
+/* FIX DEFINITIVO: mensagens de mídia e wallpaper estável */
+#mensagens {
+  position: relative !important;
+  isolation: isolate !important;
+  overflow-x: hidden !important;
+  background-attachment: scroll !important;
+  background-repeat: no-repeat !important;
+}
+/* O wallpaper é pintado no próprio scrollport, não num pseudo-elemento que
+   pode acompanhar o conteúdo e parecer saltar quando chegam novas mídias. */
+#mensagens.com-wallpaper {
+  background-image: linear-gradient(rgba(10,12,18,.43), rgba(10,12,18,.58)), var(--chat-wallpaper-image) !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: scroll !important;
+}
+#mensagens.com-wallpaper::before {
+  content: none !important;
+  display: none !important;
+}
+/* Imagens nunca podem herdar dimensões de vídeo/player ou esticar a bolha. */
+#mensagens .msg .conteudo:has(> .msg-imagem) {
+  display: block !important;
+  width: auto !important;
+  max-width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+#mensagens .msg .msg-imagem {
+  display: block !important;
+  width: auto !important;
+  height: auto !important;
+  max-width: min(220px, 58vw) !important;
+  max-height: 320px !important;
+  object-fit: contain !important;
+  border-radius: 12px !important;
+  margin: 0 !important;
+}
+#mensagens .msg:has(.audio-player) {
+  display: block !important;
+  width: fit-content !important;
+  max-width: min(82%, 300px) !important;
+  min-width: 0 !important;
+  height: auto !important;
+  min-height: 0 !important;
+  padding: 8px 10px 6px !important;
+  overflow: hidden !important;
+}
+#mensagens .msg:has(.audio-player) .conteudo,
+#mensagens .msg .audio-player {
+  box-sizing: border-box !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  height: auto !important;
+  margin: 0 !important;
+}
+#mensagens .msg .audio-player {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 9px !important;
+  width: min(250px, 64vw) !important;
+  max-width: 100% !important;
+  padding: 0 !important;
+}
+#mensagens .msg .audio-player .audio-btn {
+  flex: 0 0 42px !important;
+  width: 42px !important;
+  height: 42px !important;
+  min-height: 42px !important;
+  max-height: 42px !important;
+}
+#mensagens .msg .audio-player .audio-meio {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  gap: 3px !important;
+}
+#mensagens .msg .audio-player .audio-onda {
+  height: 23px !important;
+  min-height: 23px !important;
+  max-height: 23px !important;
+  overflow: hidden !important;
+}
+#mensagens .msg .audio-player .audio-rodape {
+  min-height: 16px !important;
+  margin: 0 !important;
+}
+/* Oculta apenas mensagens realmente sem conteúdo, sem afetar mensagens de texto apagadas. */
+#mensagens .msg:has(> .conteudo:empty):not(:has(.hora)):not(:has(.acoes)),
+#mensagens .msg:has(> .conteudo .audio-player:empty) {
+  display: none !important;
+}
+@media (max-width: 600px) {
+  #mensagens.com-wallpaper { background-position: center center !important; }
+  #mensagens .msg .msg-imagem { max-width: min(220px, 58vw) !important; max-height: 300px !important; }
+  #mensagens .msg:has(.audio-player) { max-width: min(82%, 300px) !important; }
+  #mensagens .msg .audio-player { width: min(250px, 64vw) !important; }
+}
