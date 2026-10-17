@@ -1744,3 +1744,36 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
 .input-area button svg,.input-area button .mdi{display:block;width:22px;height:22px;font-size:22px;line-height:1}
 @media(max-width:600px){.chat-header{min-height:72px;padding:9px 12px;gap:9px}.chat-back-btn{width:38px;height:40px;flex-basis:38px;border-radius:12px}.chat-header-info{gap:9px}.chat-header-info .avatar-circle{width:38px;height:38px;flex-basis:38px}.chat-header .dropdown-wrap{flex-basis:38px}.chat-options-trigger{width:38px;height:40px}.chat-header .dropdown-menu{right:0;max-width:calc(100vw - 24px)}.input-area{gap:6px;padding:9px 9px calc(9px + env(safe-area-inset-bottom))}.input-area #input-texto{height:48px;min-height:48px;padding:0 12px;font-size:13px}.input-area button,.input-area button:first-of-type,.input-area button:not(:first-of-type){width:43px;min-width:43px;height:46px;min-height:46px;flex-basis:43px;border-radius:14px}.input-area button svg,.input-area button .mdi{font-size:21px;width:21px;height:21px}#chat-header-nome{max-width:53vw}#chat-header-status{max-width:57vw}}
 @media(max-width:360px){.input-area{gap:5px;padding-inline:6px}.input-area button,.input-area button:first-of-type,.input-area button:not(:first-of-type){width:38px;min-width:38px;flex-basis:38px}.input-area #input-texto{padding-inline:10px}}
+
+
+/* Chat polish v4: menu legível e bolhas com respiro lateral no mobile */
+#menu-chat-atual { box-sizing:border-box; }
+#menu-chat-atual .dropdown-item {
+  display:grid !important;
+  grid-template-columns:22px minmax(0,1fr);
+  align-items:center !important;
+  justify-content:start !important;
+  text-align:left !important;
+  gap:10px !important;
+  width:100%;
+  min-width:0;
+  white-space:normal !important;
+  overflow-wrap:anywhere;
+  line-height:1.35 !important;
+}
+#menu-chat-atual .dropdown-item .mdi {
+  display:inline-flex;align-items:center;justify-content:center;
+  width:22px !important;min-width:22px;flex:none !important;
+  margin:0 !important;line-height:1;font-size:20px !important;
+}
+#menu-chat-atual .dropdown-item::after { content:none !important; }
+#mensagens { padding-left:12px !important; padding-right:12px !important; }
+#mensagens .msg { max-width:min(80%, 620px); margin-left:5px; margin-right:5px; box-sizing:border-box; }
+#mensagens .msg.minha { margin-left:auto; margin-right:5px; }
+@media(max-width:600px) {
+  #menu-chat-atual { min-width:0; width:min(290px,calc(100vw - 28px)); }
+  #menu-chat-atual .dropdown-item { min-height:48px; padding:12px 13px !important; font-size:14px !important; }
+  #mensagens { padding-left:10px !important; padding-right:10px !important; }
+  #mensagens .msg { max-width:82%; margin-left:4px; margin-right:4px; }
+  #mensagens .msg.minha { margin-left:auto; margin-right:4px; }
+}
