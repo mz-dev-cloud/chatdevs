@@ -651,13 +651,13 @@ function abrirMenuChatItem(event, chatId) {
   if (!chat) return;
 
   const itens = chat.removidoDoGrupo
-    ? `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}', true)">Apagar conversa</div>`
+    ? `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}', true)"><span>Apagar conversa</span></div>`
     : chat.type === 'group'
-    ? `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); abrirConfigGrupo('${chat.id}')">Configurações do grupo</div>
-       <div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}')">Apagar conversa</div>
-       <div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); sairDoGrupo('${chat.id}')">Sair do grupo</div>`
-    : `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}')">Apagar conversa</div>
-       ${chat.ehAutoConversa ? '' : `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); bloquearUsuario('${chat.otherUserId}', '${chat.id}')">Bloquear usuário</div>`}`;
+    ? `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); abrirConfigGrupo('${chat.id}')"><span>Configurações do grupo</span></div>
+       <div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}')"><span>Apagar conversa</span></div>
+       <div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); sairDoGrupo('${chat.id}')"><span>Sair do grupo</span></div>`
+    : `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}')"><span>Apagar conversa</span></div>
+       ${chat.ehAutoConversa ? '' : `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); bloquearUsuario('${chat.otherUserId}', '${chat.id}')"><span>Bloquear usuário</span></div>`}`;
 
   abrirMenuFlutuante(event.currentTarget, itens);
 }
@@ -1111,27 +1111,27 @@ function renderMenuChatAtual() {
   if (!chatAtualId) { el.innerHTML = ''; return; }
 
   if (chatAtualRemovido) {
-    el.innerHTML = `<div class="dropdown-item dropdown-clicavel" onclick="document.getElementById('menu-chat-atual').classList.add('oculto'); document.querySelector('.chat-options-trigger')?.setAttribute('aria-expanded','false'); abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i> Aparência do chat</div><div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId, true)">Apagar conversa</div>`;
+    el.innerHTML = `<div class="dropdown-item dropdown-clicavel" onclick="document.getElementById('menu-chat-atual').classList.add('oculto'); document.querySelector('.chat-options-trigger')?.setAttribute('aria-expanded','false'); abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i><span>Aparência do chat</span></div><div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId, true)"><span>Apagar conversa</span></div>`;
     return;
   }
 
   const ehAutoConversa = chatAtualOutro && chatAtualOutro.id === usuarioAtual.id;
 
   el.innerHTML = chatAtualTipo === 'group'
-    ? `<div class="dropdown-item dropdown-clicavel" onclick="document.getElementById('menu-chat-atual').classList.add('oculto'); document.querySelector('.chat-options-trigger')?.setAttribute('aria-expanded','false'); abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i> Aparência do chat</div>
-       <div class="dropdown-item dropdown-clicavel" onclick="abrirConfigGrupo(chatAtualId)">Configurações do grupo</div>
-       <div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId)">Apagar conversa</div>
-       <div class="dropdown-item dropdown-clicavel" onclick="sairDoGrupo(chatAtualId)">Sair do grupo</div>`
-    : `<div class="dropdown-item dropdown-clicavel" onclick="document.getElementById('menu-chat-atual').classList.add('oculto'); document.querySelector('.chat-options-trigger')?.setAttribute('aria-expanded','false'); abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i> Aparência do chat</div>
-       <div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId)">Apagar conversa</div>
-       ${ehAutoConversa ? '' : `<div class="dropdown-item dropdown-clicavel" onclick="bloquearUsuario(chatAtualOutro && chatAtualOutro.id, chatAtualId)">Bloquear usuário</div>`}`;
+    ? `<div class="dropdown-item dropdown-clicavel" onclick="document.getElementById('menu-chat-atual').classList.add('oculto'); document.querySelector('.chat-options-trigger')?.setAttribute('aria-expanded','false'); abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i><span>Aparência do chat</span></div>
+       <div class="dropdown-item dropdown-clicavel" onclick="abrirConfigGrupo(chatAtualId)"><span>Configurações do grupo</span></div>
+       <div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId)"><span>Apagar conversa</span></div>
+       <div class="dropdown-item dropdown-clicavel" onclick="sairDoGrupo(chatAtualId)"><span>Sair do grupo</span></div>`
+    : `<div class="dropdown-item dropdown-clicavel" onclick="document.getElementById('menu-chat-atual').classList.add('oculto'); document.querySelector('.chat-options-trigger')?.setAttribute('aria-expanded','false'); abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i><span>Aparência do chat</span></div>
+       <div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId)"><span>Apagar conversa</span></div>
+       ${ehAutoConversa ? '' : `<div class="dropdown-item dropdown-clicavel" onclick="bloquearUsuario(chatAtualOutro && chatAtualOutro.id, chatAtualId)"><span>Bloquear usuário</span></div>`}`;
 }
 
 // ---------- Personalização visual da conversa ----------
 const CHAT_APPEAR_KEY = 'chatdevs_aparencia_conversa_v1';
 function lerAparenciaChat() {
-  try { return Object.assign({ cor: '#ffb454', opacidade: 92, estilo: 'suave', wallpaper: '' }, JSON.parse(localStorage.getItem(CHAT_APPEAR_KEY) || '{}')); }
-  catch (_) { return { cor: '#ffb454', opacidade: 92, estilo: 'suave', wallpaper: '' }; }
+  try { return Object.assign({ cor: '#ffb454', opacidade: 92, estilo: 'suave', tamanhoTexto: 14, wallpaper: '' }, JSON.parse(localStorage.getItem(CHAT_APPEAR_KEY) || '{}')); }
+  catch (_) { return { cor: '#ffb454', opacidade: 92, estilo: 'suave', tamanhoTexto: 14, wallpaper: '' }; }
 }
 function salvarAparenciaChat(cfg) {
   localStorage.setItem(CHAT_APPEAR_KEY, JSON.stringify(cfg));
@@ -1144,6 +1144,7 @@ function aplicarAparenciaChat() {
   mensagens.style.setProperty('--chat-bubble-color', cfg.cor);
   mensagens.style.setProperty('--chat-bubble-opacity', `${Math.max(20, Math.min(100, Number(cfg.opacidade) || 92))}%`);
   mensagens.dataset.bubbleStyle = cfg.estilo || 'suave';
+  mensagens.style.setProperty('--chat-bubble-font-size', `${Math.max(12, Math.min(22, Number(cfg.tamanhoTexto) || 14))}px`);
   if (cfg.wallpaper) {
     mensagens.style.setProperty('--chat-wallpaper-image', `url("${cfg.wallpaper}")`);
     mensagens.classList.add('com-wallpaper');
@@ -1168,14 +1169,16 @@ function abrirAparenciaChat() {
         <div class="appearance-color-row"><input id="bubble-color" type="color" value="${cfg.cor}"><div class="appearance-swatches">${['#ffb454','#8b5cf6','#38bdf8','#34d399','#fb7185','#f1f5f9'].map(c=>`<button type="button" class="appearance-swatch" data-color="${c}" style="--swatch:${c}" aria-label="Cor ${c}"></button>`).join('')}</div></div>
         <div class="appearance-range-head"><label class="appearance-label" for="bubble-opacity">Opacidade das bolhas</label><output id="bubble-opacity-value">${cfg.opacidade}%</output></div>
         <input class="appearance-range" id="bubble-opacity" type="range" min="20" max="100" step="5" value="${cfg.opacidade}">
+        <div class="appearance-range-head"><label class="appearance-label" for="bubble-text-size">Tamanho do texto nas bolhas</label><output id="bubble-text-size-value">${Math.max(12, Math.min(22, Number(cfg.tamanhoTexto) || 14))} px</output></div>
+        <input class="appearance-range" id="bubble-text-size" type="range" min="12" max="22" step="1" value="${Math.max(12, Math.min(22, Number(cfg.tamanhoTexto) || 14))}">
         <label class="appearance-label">Estilo das bolhas</label><div class="appearance-styles"><button type="button" data-style="suave" class="appearance-style ${cfg.estilo==='suave'?'selected':''}"><span class="style-preview style-soft"></span><b>Suave</b><small>Arredondado</small></button><button type="button" data-style="compacto" class="appearance-style ${cfg.estilo==='compacto'?'selected':''}"><span class="style-preview style-compact"></span><b>Compacto</b><small>Mais discreto</small></button><button type="button" data-style="vidro" class="appearance-style ${cfg.estilo==='vidro'?'selected':''}"><span class="style-preview style-glass"></span><b>Vidro</b><small>Translúcido</small></button></div>
         <label class="appearance-label">Papel de parede</label><div class="wallpaper-actions"><button type="button" class="appearance-upload" id="appearance-upload"><i class="mdi mdi-image-plus-outline"></i><span><b>Escolher imagem</b><small>Use uma imagem do seu dispositivo</small></span><i class="mdi mdi-chevron-right"></i></button><input type="file" id="appearance-wallpaper-file" accept="image/*" hidden><button type="button" class="appearance-remove" id="appearance-remove" ${cfg.wallpaper?'':'disabled'}><i class="mdi mdi-image-remove-outline"></i> Remover imagem e voltar ao fundo padrão</button></div>
       </div><footer class="appearance-footer"><button type="button" class="appearance-reset" id="appearance-reset">Restaurar padrão</button><button type="button" class="appearance-done" data-close>Aplicar alterações</button></footer>
     </section>`;
   root.appendChild(modal);
-  const color = modal.querySelector('#bubble-color'), opacity = modal.querySelector('#bubble-opacity');
-  const update = () => { const next = {...lerAparenciaChat(), cor: color.value, opacidade: Number(opacity.value)}; modal.querySelector('#bubble-opacity-value').textContent = `${opacity.value}%`; salvarAparenciaChat(next); };
-  color.addEventListener('input', update); opacity.addEventListener('input', update);
+  const color = modal.querySelector('#bubble-color'), opacity = modal.querySelector('#bubble-opacity'), textSize = modal.querySelector('#bubble-text-size');
+  const update = () => { const next = {...lerAparenciaChat(), cor: color.value, opacidade: Number(opacity.value), tamanhoTexto: Number(textSize.value)}; modal.querySelector('#bubble-opacity-value').textContent = `${opacity.value}%`; modal.querySelector('#bubble-text-size-value').textContent = `${textSize.value} px`; salvarAparenciaChat(next); };
+  color.addEventListener('input', update); opacity.addEventListener('input', update); textSize.addEventListener('input', update);
   modal.querySelectorAll('[data-color]').forEach(b=>b.addEventListener('click',()=>{color.value=b.dataset.color;update();}));
   modal.querySelectorAll('[data-style]').forEach(b=>b.addEventListener('click',()=>{modal.querySelectorAll('[data-style]').forEach(x=>x.classList.toggle('selected',x===b));salvarAparenciaChat({...lerAparenciaChat(),estilo:b.dataset.style});}));
   modal.querySelector('#appearance-upload').addEventListener('click',()=>modal.querySelector('#appearance-wallpaper-file').click());
@@ -1193,7 +1196,7 @@ function abrirAparenciaChat() {
     }catch(_){mostrarAviso('Não foi possível carregar essa imagem.');}
   });
   modal.querySelector('#appearance-remove').addEventListener('click',()=>{salvarAparenciaChat({...lerAparenciaChat(),wallpaper:''});modal.querySelector('#appearance-remove').disabled=true;});
-  modal.querySelector('#appearance-reset').addEventListener('click',()=>{salvarAparenciaChat({cor:'#ffb454',opacidade:92,estilo:'suave',wallpaper:''});modal.remove();abrirAparenciaChat();});
+  modal.querySelector('#appearance-reset').addEventListener('click',()=>{salvarAparenciaChat({cor:'#ffb454',opacidade:92,estilo:'suave',tamanhoTexto:14,wallpaper:''});modal.remove();abrirAparenciaChat();});
   modal.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>modal.remove()));
   modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
 }
