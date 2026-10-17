@@ -1840,3 +1840,23 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
     font-size: 13px !important;
   }
 }
+
+/* Ajuste final: limitar a largura do menu de opções da conversa. */
+.chat-header .dropdown-menu#menu-chat-atual,
+#menu-chat-atual.dropdown-menu {
+  box-sizing: border-box !important;
+  width: 300px !important;
+  min-width: 0 !important;
+  max-width: calc(100vw - 24px) !important;
+}
+#menu-chat-atual.dropdown-menu > .dropdown-item {
+  box-sizing: border-box !important;
+  width: 100% !important;
+  min-width: 0 !important;
+}
+@media (max-width: 600px) {
+  .chat-header .dropdown-menu#menu-chat-atual,
+  #menu-chat-atual.dropdown-menu {
+    width: min(290px, calc(100vw - 24px)) !important;
+  }
+}
