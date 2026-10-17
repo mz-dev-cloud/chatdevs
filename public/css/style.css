@@ -1777,3 +1777,37 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
   #mensagens .msg { max-width:82%; margin-left:4px; margin-right:4px; }
   #mensagens .msg.minha { margin-left:auto; margin-right:4px; }
 }
+
+/* Correção definitiva do menu: ícone e rótulo ficam em colunas estáveis. */
+#menu-chat-atual .dropdown-item {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 11px !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  white-space: normal !important;
+  overflow-wrap: normal !important;
+  word-break: normal !important;
+  text-align: left !important;
+}
+#menu-chat-atual .dropdown-item > span {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
+  white-space: normal;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+#menu-chat-atual .dropdown-item .mdi {
+  flex: 0 0 22px !important;
+  width: 22px !important;
+  min-width: 22px !important;
+}
+#mensagens .msg .conteudo { font-size: var(--chat-bubble-font-size, 14px) !important; }
+@media (max-width: 600px) {
+  #menu-chat-atual { width: min(320px, calc(100vw - 24px)) !important; }
+  #menu-chat-atual .dropdown-item { padding: 12px 14px !important; font-size: 14px !important; }
+}
