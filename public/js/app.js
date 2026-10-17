@@ -930,7 +930,7 @@ function atualizarStatusCabecalho(contato, tipo) {
   if (!el) return;
   el.classList.remove('is-online');
   if (tipo === 'group') { el.textContent = 'Grupo'; return; }
-  if (!contato) { el.textContent = 'Status indisponível'; return; }
+  if (!contato) { el.textContent = 'Status não compartilhado'; return; }
   const online = contato.online === true || contato.isOnline === true || contato.is_online === true;
   const ultimo = contato.lastSeen || contato.last_seen || contato.lastSeenAt || contato.last_seen_at || contato.lastActiveAt;
   if (online) { el.textContent = 'Online'; el.classList.add('is-online'); return; }
@@ -943,14 +943,15 @@ function atualizarStatusCabecalho(contato, tipo) {
       return;
     }
   }
-  el.textContent = 'Status indisponível';
+  el.textContent = 'Status não compartilhado';
 }
 
 // ---------- Abrir um chat ----------
 async function abrirChat(chatId, nome, tipo, outroId, outroEmail, removidoDoGrupo, photoUrl) {
   chatAtualId = chatId;
   chatAtualTipo = tipo || 'private';
-  chatAtualOutro = outroId ? { id: outroId, username: nome, email: outroEmail || null, photoUrl: photoUrl || null } : null;
+  const contatoAnterior = (chatAtualOutro && String(chatAtualOutro.id) === String(outroId)) ? chatAtualOutro : null;
+  chatAtualOutro = outroId ? { ...(contatoAnterior || {}), id: outroId, username: nome, email: outroEmail || null, photoUrl: photoUrl || null } : null;
   chatAtualRemovido = !!removidoDoGrupo;
   chatAtualModoEnvio = 'todos';
   chatAtualSouAdmin = false;
