@@ -1860,3 +1860,31 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
     width: min(290px, calc(100vw - 24px)) !important;
   }
 }
+
+
+/* Ajuste definitivo: menu dos três pontos realmente estreito no mobile. */
+.chat-header .dropdown-wrap > .dropdown-menu,
+.chat-header .dropdown-menu#menu-chat-atual,
+.dropdown-wrap #menu-chat-atual.dropdown-menu,
+#menu-chat-atual.dropdown-menu {
+  box-sizing: border-box !important;
+  width: 224px !important;
+  min-width: 224px !important;
+  max-width: min(224px, calc(100vw - 24px)) !important;
+}
+#menu-chat-atual.dropdown-menu > .dropdown-item {
+  width: 100% !important;
+  max-width: 100% !important;
+  white-space: nowrap !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 360px) {
+  .chat-header .dropdown-wrap > .dropdown-menu,
+  .chat-header .dropdown-menu#menu-chat-atual,
+  .dropdown-wrap #menu-chat-atual.dropdown-menu,
+  #menu-chat-atual.dropdown-menu {
+    width: calc(100vw - 24px) !important;
+    min-width: 0 !important;
+  }
+}
