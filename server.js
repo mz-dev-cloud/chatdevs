@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
+const cloudinary = require('cloudinary').v2;
 const { init, loadDB, saveDB } = require('./db');
 
 const app = express();
@@ -26,10 +27,30 @@ app.get('/admin', (req, res) => {
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// ---------- Upload de mídia (áudio/vídeo) ----------
+// ---------- Upload persistente de mídia (inclui fotos e GIFs de perfil) ----------
+// O disco local do Railway é efêmero. Quando Cloudinary está configurado, os arquivos
+// ficam em armazenamento persistente e a URL HTTPS é guardada no MongoDB pelo perfil/chat.
+const cloudinaryConfigurado = Boolean(
+  process.env.CLOUDINARY_CLOUD_NAME &&
+  process.env.CLOUDINARY_API_KEY &&
+  process.env.CLOUDINARY_API_SECRET
+);
+
+if (cloudinaryConfigurado) {
+  cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+    secure: true
+  });
+  console.log('[upload] Cloudinary habilitado para armazenamento persistente.');
+} else {
+  console.warn('[upload] Cloudinary não configurado; arquivos locais podem sumir após reinício/deploy do Railway. Configure CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY e CLOUDINARY_API_SECRET.');
+}
+
 fs.mkdirSync(path.join(__dirname, 'uploads'), { recursive: true });
 const upload = multer({
-  storage: multer.diskStorage({
+  storage: cloudinaryConfigurado ? multer.memoryStorage() : multer.diskStorage({
     destination: (req, file, cb) => cb(null, path.join(__dirname, 'uploads')),
     filename: (req, file, cb) => {
       const ext = path.extname(file.originalname) || '';
@@ -39,9 +60,38 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 } // 25MB
 });
 
-app.post('/api/upload', upload.single('file'), (req, res) => {
+function enviarParaCloudinary(file) {
+  return new Promise((resolve, reject) => {
+    const tipo = String(file.mimetype || 'application/octet-stream');
+    const resourceType = tipo.startsWith('image/') ? 'image' :
+      (tipo.startsWith('video/') || tipo.startsWith('audio/') ? 'video' : 'raw');
+    const stream = cloudinary.uploader.upload_stream({
+      folder: 'chatdevs',
+      resource_type: resourceType,
+      public_id: uuidv4(),
+      overwrite: false,
+      use_filename: false
+    }, (error, result) => {
+      if (error) return reject(error);
+      resolve(result);
+    });
+    stream.end(file.buffer);
+  });
+}
+
+app.post('/api/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
-  res.json({ url: '/uploads/' + req.file.filename, filename: req.file.filename });
+  try {
+    if (cloudinaryConfigurado) {
+      const resultado = await enviarParaCloudinary(req.file);
+      return res.json({ url: resultado.secure_url, filename: resultado.public_id, persistent: true });
+    }
+    // Fallback local para não quebrar uploads durante configuração; não é persistente no Railway.
+    return res.json({ url: '/uploads/' + req.file.filename, filename: req.file.filename, persistent: false });
+  } catch (error) {
+    console.error('[upload] Falha no Cloudinary:', error.message);
+    return res.status(502).json({ error: 'Não foi possível armazenar o arquivo. Confira as variáveis do Cloudinary no Railway.' });
+  }
 });
 
 // ---------- Helpers ----------
