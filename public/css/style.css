@@ -1811,3 +1811,32 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
   #menu-chat-atual { width: min(320px, calc(100vw - 24px)) !important; }
   #menu-chat-atual .dropdown-item { padding: 12px 14px !important; font-size: 14px !important; }
 }
+
+/* Menu de três pontos mais compacto, sem alterar o restante do chat. */
+#menu-chat-atual.dropdown-menu {
+  padding: 6px !important;
+  gap: 2px;
+}
+#menu-chat-atual .dropdown-item {
+  min-height: 40px !important;
+  height: auto;
+  padding: 8px 11px !important;
+  gap: 9px !important;
+  line-height: 1.25 !important;
+  font-size: 13px !important;
+  border-radius: 10px !important;
+}
+#menu-chat-atual .dropdown-item .mdi {
+  font-size: 18px !important;
+  line-height: 1 !important;
+}
+@media (max-width: 600px) {
+  #menu-chat-atual.dropdown-menu {
+    padding: 5px !important;
+  }
+  #menu-chat-atual .dropdown-item {
+    min-height: 38px !important;
+    padding: 7px 10px !important;
+    font-size: 13px !important;
+  }
+}
