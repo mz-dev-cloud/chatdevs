@@ -3765,3 +3765,80 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
   .perfil-editor-acoes { bottom:-18px; }
 }
 @media (prefers-reduced-motion: reduce) { .modal-box--perfil-editor, .perfil-publico-card { animation:none; } }
+
+
+/* Perfil público: acabamento visual refinado */
+.perfil-publico-card {
+  isolation: isolate;
+  overflow-x: hidden;
+}
+.perfil-publico-card::before,
+.perfil-publico-card::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  width: 190px;
+  height: 190px;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(2px);
+  opacity: .16;
+}
+.perfil-publico-card::before {
+  top: 34px;
+  left: -92px;
+  background: radial-gradient(circle at center, var(--accent, #ffb454) 0%, rgba(255,180,84,.35) 38%, transparent 72%);
+}
+.perfil-publico-card::after {
+  right: -95px;
+  bottom: 22px;
+  background: radial-gradient(circle at center, #7c8cff 0%, rgba(124,140,255,.3) 40%, transparent 72%);
+}
+.perfil-publico-hero,
+.perfil-publico-detalhes,
+.perfil-publico-card > .modal-actions { position: relative; z-index: 1; }
+.perfil-bio-card {
+  position: relative;
+  width: min(100%, 470px);
+  box-sizing: border-box;
+  margin: 6px auto 0;
+  padding: 19px 30px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(255,255,255,.045), rgba(127,127,127,.025));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.025);
+}
+.perfil-bio-card .perfil-bio {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+  text-align: center;
+}
+.perfil-bio-card--vazia { padding-top: 15px; padding-bottom: 15px; }
+.perfil-bio-aspas {
+  position: absolute;
+  color: var(--accent, #ffb454);
+  font-family: Georgia, serif;
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1;
+  opacity: .9;
+}
+.perfil-bio-aspas--abre { top: 7px; left: 11px; }
+.perfil-bio-aspas--fecha { right: 11px; bottom: 2px; }
+.perfil-publico-detalhes {
+  width: min(100%, 500px);
+  margin: 4px auto 20px;
+}
+.perfil-contato-link,
+.perfil-redes-lista {
+  width: 100%;
+  box-sizing: border-box;
+}
+.perfil-rede-link,
+.perfil-contato-link { padding: 10px 12px; gap: 10px; }
+@media (max-width: 600px) {
+  .perfil-publico-detalhes { width: calc(100% - 18px); }
+  .perfil-bio-card { padding: 18px 28px; }
+  .perfil-publico-card::before, .perfil-publico-card::after { width: 150px; height: 150px; }
+}
