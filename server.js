@@ -1,3 +1,6 @@
+// Carrega .env em desenvolvimento; no Railway, usa as variáveis do serviço.
+require('dotenv').config();
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
