@@ -294,9 +294,13 @@ function renderConfigModal() {
         <div class="config-grupo">
           <span class="config-label">Tema</span>
           <div class="swatches">
-            <button class="swatch-tema swatch-dark ${c.tema === 'dark' ? 'ativo' : ''}" onclick="definirConfig('tema','dark')" title="Escuro"></button>
-            <button class="swatch-tema swatch-light ${c.tema === 'light' ? 'ativo' : ''}" onclick="definirConfig('tema','light')" title="Claro"></button>
-            <button class="swatch-tema swatch-amoled ${c.tema === 'amoled' ? 'ativo' : ''}" onclick="definirConfig('tema','amoled')" title="Preto puro"></button>
+            <button class="swatch-tema swatch-dark ${c.tema === 'dark' ? 'ativo' : ''}" onclick="definirConfig('tema','dark')" title="Grafite premium" aria-label="Tema grafite"></button>
+            <button class="swatch-tema swatch-light ${c.tema === 'light' ? 'ativo' : ''}" onclick="definirConfig('tema','light')" title="Claro" aria-label="Tema claro"></button>
+            <button class="swatch-tema swatch-amoled ${c.tema === 'amoled' ? 'ativo' : ''}" onclick="definirConfig('tema','amoled')" title="Preto AMOLED" aria-label="Tema AMOLED"></button>
+            <button class="swatch-tema swatch-midnight ${c.tema === 'midnight' ? 'ativo' : ''}" onclick="definirConfig('tema','midnight')" title="Meia-noite" aria-label="Tema meia-noite"></button>
+            <button class="swatch-tema swatch-ocean ${c.tema === 'ocean' ? 'ativo' : ''}" onclick="definirConfig('tema','ocean')" title="Oceano" aria-label="Tema oceano"></button>
+            <button class="swatch-tema swatch-violet ${c.tema === 'violet' ? 'ativo' : ''}" onclick="definirConfig('tema','violet')" title="Violeta" aria-label="Tema violeta"></button>
+            <button class="swatch-tema swatch-forest ${c.tema === 'forest' ? 'ativo' : ''}" onclick="definirConfig('tema','forest')" title="Floresta" aria-label="Tema floresta"></button>
           </div>
         </div>
 
