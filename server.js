@@ -1,6 +1,3 @@
-// Carrega .env em desenvolvimento; no Railway, usa as variáveis do serviço.
-require('dotenv').config();
-
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -30,6 +27,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ---------- Upload de mídia (áudio/vídeo) ----------
+fs.mkdirSync(path.join(__dirname, 'uploads'), { recursive: true });
 const upload = multer({
   storage: multer.diskStorage({
     destination: (req, file, cb) => cb(null, path.join(__dirname, 'uploads')),
@@ -54,7 +52,22 @@ function getClientIp(req) {
 }
 
 function publicUser(u) {
-  return { id: u.id, username: u.username, email: u.email, photoUrl: u.photoUrl || null };
+  return {
+    id: u.id, username: u.username, email: u.email, photoUrl: u.photoUrl || null,
+    bio: u.bio || '', phone: u.phone || '', ringColor: u.ringColor || '#ffb454',
+    socials: Array.isArray(u.socials) ? u.socials : []
+  };
+}
+
+const SOCIALS_PERMITIDAS = new Set(['instagram', 'tiktok', 'youtube', 'facebook', 'x']);
+function normalizarSocials(socials) {
+  if (!Array.isArray(socials)) return [];
+  return socials.slice(0, 5).map(item => {
+    const network = String(item && item.network || '').toLowerCase();
+    const handle = String(item && item.handle || '').trim().replace(/^@+/, '').slice(0, 100);
+    if (!SOCIALS_PERMITIDAS.has(network) || !handle) return null;
+    return { network, handle };
+  }).filter(Boolean);
 }
 
 function findUserByEmailOrUsername(db, query) {
@@ -274,6 +287,24 @@ app.post('/api/users/:userId/photo', (req, res) => {
   res.json({ ok: true, user: publicUser(user) });
 });
 
+// ---------- Atualizar campos do perfil próprio ----------
+app.post('/api/users/:userId/profile', (req, res) => {
+  const { userId } = req.params;
+  if (req.body.userId !== userId) return res.status(403).json({ error: 'Você só pode editar seu próprio perfil.' });
+  const db = loadDB();
+  const user = db.users.find(u => u.id === userId);
+  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+  const bio = String(req.body.bio || '').trim().slice(0, 240);
+  const phone = String(req.body.phone || '').trim().slice(0, 30);
+  const ringColor = /^#[0-9a-fA-F]{6}$/.test(String(req.body.ringColor || '')) ? req.body.ringColor : '#ffb454';
+  user.bio = bio;
+  user.phone = phone;
+  user.ringColor = ringColor;
+  user.socials = normalizarSocials(req.body.socials);
+  saveDB(db);
+  res.json({ ok: true, user: publicUser(user) });
+});
+
 // ---------- Buscar usuário (pra iniciar conversa) ----------
 app.get('/api/find-user', (req, res) => {
   const { query, viewerId } = req.query;
@@ -321,7 +352,11 @@ app.get('/api/users/:userId/public', (req, res) => {
   res.json({
     id: user.id,
     username: user.username,
-    photoUrl: fotoParaViewer(db, user, viewerId)
+    photoUrl: fotoParaViewer(db, user, viewerId),
+    bio: user.bio || '',
+    phone: user.phone || '',
+    ringColor: user.ringColor || '#ffb454',
+    socials: normalizarSocials(user.socials)
   });
 });
 
