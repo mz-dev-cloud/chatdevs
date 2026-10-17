@@ -595,7 +595,7 @@ function renderizarListaChats() {
       ? `<span class="badge-nao-lidas">${chat.unreadCount > 99 ? '99+' : chat.unreadCount}</span>`
       : '';
 
-    const avatarHtml = `<span class="avatar-circle avatar-circle--sm">${avatarInnerHtml(chat.name, chat.photoUrl)}</span>`;
+    const avatarHtml = `<span class="avatar-circle avatar-circle--sm avatar-perfil-abrir" role="button" tabindex="0" title="Ver perfil">${avatarInnerHtml(chat.name, chat.photoUrl)}</span>`;
 
     div.innerHTML = `
       <div class="item-chat-topo">
@@ -609,6 +609,11 @@ function renderizarListaChats() {
         <div class="preview">${escapeHtml(chat.lastMessage || 'Sem mensagens ainda')}</div>
         ${badgeHtml}
       </div>`;
+    const avatarBtn = div.querySelector('.avatar-perfil-abrir');
+    if (avatarBtn && chat.type !== 'group' && chat.otherUserId) {
+      avatarBtn.addEventListener('click', e => { e.stopPropagation(); abrirPerfilUsuario(chat.otherUserId); });
+      avatarBtn.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); abrirPerfilUsuario(chat.otherUserId); } });
+    }
     container.appendChild(div);
   });
 }
@@ -962,6 +967,8 @@ async function abrirChat(chatId, nome, tipo, outroId, outroEmail, removidoDoGrup
 
   document.getElementById('chat-header-nome').textContent = nome;
   document.getElementById('chat-header-avatar').innerHTML = avatarInnerHtml(nome, photoUrl || null);
+  const headerAvatar = document.getElementById('chat-header-avatar');
+  if (headerAvatar) { headerAvatar.style.cursor = tipo === 'group' ? 'default' : 'pointer'; headerAvatar.onclick = () => { if (tipo !== 'group' && chatAtualOutro) abrirPerfilUsuario(chatAtualOutro.id); }; }
   atualizarStatusCabecalho(chatAtualOutro, chatAtualTipo);
   document.getElementById('home-view').classList.add('oculto');
   document.getElementById('chat-view').classList.remove('oculto');
@@ -1928,18 +1935,14 @@ function atualizarAvatarTopo() {
   document.getElementById('avatar-topo').innerHTML = avatarInnerHtml(usuarioAtual.username, usuarioAtual.photoUrl);
 }
 
-// ---------- Janela de editar perfil (foto + privacidade dela) ----------
+// ---------- Janela de editar perfil completo ----------
 async function abrirEditarPerfil() {
   const root = document.getElementById('modal-root');
   const respPriv = await fetch(`/api/users/${usuarioAtual.id}/photo-privacy`);
-  const priv = await respPriv.json();
-
-  const acoesFotoHtml = `
-    <div class="info-grupo-acoes-foto">
-      <button class="link-sutil" id="perfil-trocar-foto" type="button">Trocar foto</button>
-      ${usuarioAtual.photoUrl ? `<button class="link-sutil" id="perfil-remover-foto" type="button">Remover foto</button>` : ''}
-    </div>`;
-
+  const priv = await respPriv.json().catch(() => ({ privacy: 'todos', allowList: [] }));
+  const sociais = Array.isArray(usuarioAtual.socials) ? usuarioAtual.socials : [];
+  const socialAtual = network => (sociais.find(s => s.network === network) || {}).handle || '';
+  const ring = /^#[0-9a-fA-F]{6}$/.test(usuarioAtual.ringColor || '') ? usuarioAtual.ringColor : '#ffb454';
   const opcoesPrivacidade = [
     { valor: 'todos', label: 'Todos podem ver' },
     { valor: 'contatos', label: 'Só meus contatos' },
@@ -1947,58 +1950,79 @@ async function abrirEditarPerfil() {
     { valor: 'ninguem', label: 'Ninguém pode ver' }
   ];
   const privacidadeAtual = priv.privacy || 'todos';
-
+  const socials = [
+    { id: 'instagram', label: 'Instagram', placeholder: 'seu.usuario' },
+    { id: 'tiktok', label: 'TikTok', placeholder: 'seu.usuario' },
+    { id: 'youtube', label: 'YouTube', placeholder: '@seucanal ou ID' },
+    { id: 'facebook', label: 'Facebook', placeholder: 'seu.usuario ou página' },
+    { id: 'x', label: 'X (Twitter)', placeholder: 'seu.usuario' }
+  ];
   const privacidadeHtml = `
     <div class="config-grupo">
       <span class="config-label">Quem pode ver sua foto de perfil</span>
       <div class="privacidade-opcoes">
         ${opcoesPrivacidade.map(o => `
-          <label class="privacidade-opcao">
-            <input type="radio" name="foto-privacidade" value="${o.valor}" ${privacidadeAtual === o.valor ? 'checked' : ''}>
-            ${o.label}
-          </label>`).join('')}
+          <label class="privacidade-opcao"><input type="radio" name="foto-privacidade" value="${o.valor}" ${privacidadeAtual === o.valor ? 'checked' : ''}> ${o.label}</label>`).join('')}
       </div>
       <div id="privacidade-lista-wrap" class="${privacidadeAtual === 'lista' ? '' : 'oculto'}">
-        <div class="convite-link-row">
-          <input class="modal-input" id="privacidade-lista-busca" type="text" placeholder="Adicionar por email ou usuário">
-          <button class="btn-outline btn-compacto" id="privacidade-lista-add">Adicionar</button>
-        </div>
+        <div class="convite-link-row"><input class="modal-input" id="privacidade-lista-busca" type="text" placeholder="Adicionar por email ou usuário"><button class="btn-outline btn-compacto" id="privacidade-lista-add">Adicionar</button></div>
         <div id="privacidade-lista-itens" class="lista-contatos">${renderListaPrivacidadeItens(priv.allowList)}</div>
       </div>
     </div>`;
-
   root.innerHTML = `
     <div class="modal-overlay" id="modal-overlay">
-      <div class="modal-box">
-        <div class="info-grupo-topo">
-          <div class="avatar-circle avatar-circle--lg">${avatarInnerHtml(usuarioAtual.username, usuarioAtual.photoUrl)}</div>
+      <div class="modal-box modal-box--perfil-editor">
+        <div class="perfil-editor-cabecalho">
+          <button class="perfil-fechar-x" id="perfil-fechar-x" type="button" aria-label="Fechar perfil">×</button>
+          <div class="avatar-circle avatar-circle--lg perfil-editor-avatar" style="border-color:${escapeAttr(ring)}">${avatarInnerHtml(usuarioAtual.username, usuarioAtual.photoUrl)}</div>
           <h3 class="modal-title info-grupo-nome">${escapeHtml(usuarioAtual.username)}</h3>
-          ${acoesFotoHtml}
-          <input type="file" id="perfil-foto-input" accept="image/*" style="display:none">
+          <p class="perfil-editor-subtitulo">Seu perfil, do seu jeito</p>
+          <div class="info-grupo-acoes-foto">
+            <button class="link-sutil" id="perfil-trocar-foto" type="button">Trocar foto / GIF</button>
+            ${usuarioAtual.photoUrl ? '<button class="link-sutil" id="perfil-remover-foto" type="button">Remover foto</button>' : ''}
+          </div>
+          <input type="file" id="perfil-foto-input" accept="image/*,.gif" style="display:none">
+        </div>
+        <div class="perfil-editor-campos">
+          <label class="perfil-campo"><span>Bio <small>até 240 caracteres</small></span><textarea id="perfil-bio-input" maxlength="240" rows="3" placeholder="Uma frase sobre você...">${escapeHtml(usuarioAtual.bio || '')}</textarea></label>
+          <label class="perfil-campo"><span>Número de contato</span><input id="perfil-phone-input" type="tel" maxlength="30" value="${escapeAttr(usuarioAtual.phone || '')}" placeholder="+55 11 99999-9999" autocomplete="tel"></label>
+          <label class="perfil-campo perfil-campo-cor"><span>Cor da borda da foto</span><input id="perfil-ring-color" type="color" value="${escapeAttr(ring)}"></label>
+          <div class="perfil-socials"><span class="config-label">Suas redes sociais</span><p class="perfil-ajuda">Adicione o usuário; o link será criado automaticamente no seu perfil.</p>
+            ${socials.map(net => `<label class="perfil-campo perfil-social-campo"><span>${net.label}</span><input data-social="${net.id}" maxlength="100" value="${escapeAttr(socialAtual(net.id))}" placeholder="${net.placeholder}"></label>`).join('')}
+          </div>
         </div>
         ${privacidadeHtml}
-        <div class="modal-actions">
-          <button class="btn-ok btn-compacto" id="perfil-fechar" type="button">Fechar</button>
-        </div>
+        <div class="modal-actions perfil-editor-acoes"><button class="btn-outline btn-compacto" id="perfil-cancelar" type="button">Fechar</button><button class="btn-ok btn-compacto" id="perfil-salvar" type="button">Salvar perfil</button></div>
       </div>
     </div>`;
-
-  document.getElementById('perfil-fechar').onclick = () => { root.innerHTML = ''; };
-  document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') root.innerHTML = ''; };
+  const fechar = () => { root.innerHTML = ''; };
+  document.getElementById('perfil-fechar-x').onclick = fechar;
+  document.getElementById('perfil-cancelar').onclick = fechar;
+  document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') fechar(); };
   document.getElementById('perfil-trocar-foto').onclick = () => document.getElementById('perfil-foto-input').click();
-  document.getElementById('perfil-foto-input').onchange = e => {
-    if (e.target.files[0]) trocarFotoPerfil(e.target.files[0]);
-  };
+  document.getElementById('perfil-foto-input').onchange = e => { if (e.target.files[0]) trocarFotoPerfil(e.target.files[0]); };
   const btnRemover = document.getElementById('perfil-remover-foto');
   if (btnRemover) btnRemover.onclick = () => trocarFotoPerfil(null);
-
-  document.querySelectorAll('input[name="foto-privacidade"]').forEach(radio => {
-    radio.onchange = () => mudarPrivacidadeFoto(radio.value);
-  });
-
+  document.getElementById('perfil-ring-color').oninput = e => {
+    const avatar = document.querySelector('.perfil-editor-avatar'); if (avatar) avatar.style.borderColor = e.target.value;
+  };
+  document.querySelectorAll('input[name="foto-privacidade"]').forEach(radio => { radio.onchange = () => mudarPrivacidadeFoto(radio.value); });
   const inputBusca = document.getElementById('privacidade-lista-busca');
   document.getElementById('privacidade-lista-add').onclick = () => adicionarNaListaPrivacidade(inputBusca.value.trim());
   inputBusca.addEventListener('keydown', e => { if (e.key === 'Enter') adicionarNaListaPrivacidade(inputBusca.value.trim()); });
+  document.getElementById('perfil-salvar').onclick = async () => {
+    const socials = Array.from(document.querySelectorAll('[data-social]')).map(el => ({ network: el.dataset.social, handle: el.value.trim() })).filter(x => x.handle);
+    const resp = await fetch(`/api/users/${usuarioAtual.id}/profile`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: usuarioAtual.id, bio: document.getElementById('perfil-bio-input').value, phone: document.getElementById('perfil-phone-input').value, ringColor: document.getElementById('perfil-ring-color').value, socials }) });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) { mostrarAviso(data.error || 'Não foi possível salvar o perfil.'); return; }
+    usuarioAtual = { ...usuarioAtual, ...data.user };
+    localStorage.setItem('usuario', JSON.stringify(usuarioAtual));
+    const contas = carregarContas().map(c => c.id === usuarioAtual.id ? { ...c, ...data.user } : c);
+    localStorage.setItem('contas', JSON.stringify(contas));
+    atualizarAvatarTopo();
+    abrirEditarPerfil();
+    mostrarAviso('Perfil atualizado!', 'sucesso');
+  };
 }
 
 // ---------- Linhas da lista seleta (dentro da privacidade da foto) ----------
@@ -2769,25 +2793,32 @@ async function abrirPerfilUsuario(userId) {
   if (!resp.ok) { mostrarAviso('Não foi possível abrir esse perfil.'); return; }
   const u = await resp.json();
   const root = document.getElementById('modal-root');
+  const ring = /^#[0-9a-fA-F]{6}$/.test(u.ringColor || '') ? u.ringColor : '#ffb454';
   const fotoHtml = u.photoUrl
-    ? `<img class="perfil-foto-grande" src="${escapeAttr(u.photoUrl)}" alt="" onclick="window.open('${escapeAttr(u.photoUrl)}','_blank')" title="Ver foto em tamanho grande">`
-    : `<div class="avatar-circle avatar-circle--lg">${avatarInnerHtml(u.username, null)}</div>`;
-  const bioHtml = u.bio
-    ? `<p class="perfil-bio">${escapeHtml(u.bio)}</p>`
-    : `<p class="perfil-bio perfil-bio--vazia">Sem bio.</p>`;
+    ? `<img class="perfil-foto-grande" style="border-color:${escapeAttr(ring)}" src="${escapeAttr(u.photoUrl)}" alt="Foto de ${escapeAttr(u.username)}" onclick="window.open('${escapeAttr(u.photoUrl)}','_blank')" title="Ver foto em tamanho grande">`
+    : `<div class="avatar-circle avatar-circle--lg perfil-editor-avatar" style="border-color:${escapeAttr(ring)}">${avatarInnerHtml(u.username, null)}</div>`;
+  const bioHtml = u.bio ? `<p class="perfil-bio">${escapeHtml(u.bio)}</p>` : `<p class="perfil-bio perfil-bio--vazia">Sem bio.</p>`;
+  const redes = Array.isArray(u.socials) ? u.socials : [];
+  const bases = { instagram: 'https://www.instagram.com/', tiktok: 'https://www.tiktok.com/@', youtube: 'https://www.youtube.com/@', facebook: 'https://www.facebook.com/', x: 'https://x.com/' };
+  const nomes = { instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', facebook: 'Facebook', x: 'X' };
+  const linksHtml = redes.map(r => {
+    if (!bases[r.network] || !r.handle) return '';
+    const handle = r.handle.replace(/^@+/, '');
+    const url = bases[r.network] + encodeURIComponent(handle);
+    return `<a class="perfil-rede-link" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer"><span class="perfil-rede-icone mdi mdi-${r.network === 'x' ? 'alpha-x-circle' : r.network === 'youtube' ? 'youtube' : r.network}"></span><span class="perfil-rede-nome">${nomes[r.network]}</span><span class="perfil-rede-handle">@${escapeHtml(handle)}</span><span class="mdi mdi-open-in-new perfil-rede-externo"></span></a>`;
+  }).join('');
+  const phoneHtml = u.phone ? `<a class="perfil-contato-link" href="https://wa.me/${u.phone.replace(/\D/g, '')}" target="_blank" rel="noopener noreferrer"><span class="mdi mdi-whatsapp"></span><span>${escapeHtml(u.phone)}</span><span class="mdi mdi-open-in-new"></span></a>` : '';
   root.innerHTML = `
-    <div class="modal-overlay" id="modal-overlay">
-      <div class="modal-box modal-box--perfil">
-        <div class="info-grupo-topo">
-          ${fotoHtml}  
-          <h3 class="modal-title info-grupo-nome">${escapeHtml(u.username)}</h3>
-          ${bioHtml}
-        </div>
-        <div class="modal-actions">
-          <button class="btn-ok btn-compacto" id="perfil-usuario-fechar" type="button">Fechar</button>
-        </div>
+    <div class="modal-overlay perfil-overlay" id="modal-overlay">
+      <div class="modal-box modal-box--perfil perfil-publico-card">
+        <button class="perfil-fechar-x" id="perfil-usuario-fechar-x" type="button" aria-label="Fechar perfil">×</button>
+        <div class="perfil-publico-hero">${fotoHtml}<h3 class="modal-title info-grupo-nome">${escapeHtml(u.username)}</h3><span class="perfil-publico-tag">Perfil do ChatDevs</span>${bioHtml}</div>
+        <div class="perfil-publico-detalhes">${phoneHtml}${linksHtml ? `<div class="perfil-redes-lista">${linksHtml}</div>` : '<p class="perfil-bio perfil-bio--vazia">Nenhuma rede social adicionada.</p>'}</div>
+        <div class="modal-actions"><button class="btn-ok btn-compacto" id="perfil-usuario-fechar" type="button">Fechar perfil</button></div>
       </div>
     </div>`;
-  document.getElementById('perfil-usuario-fechar').onclick = () => { root.innerHTML = ''; };
-  document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') root.innerHTML = ''; };
+  const fechar = () => { root.innerHTML = ''; };
+  document.getElementById('perfil-usuario-fechar').onclick = fechar;
+  document.getElementById('perfil-usuario-fechar-x').onclick = fechar;
+  document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') fechar(); };
 }
