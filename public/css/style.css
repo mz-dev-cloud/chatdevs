@@ -3997,3 +3997,50 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
   .msg:has(.audio-player) { max-width: 88% !important; }
   .msg .audio-player { width: min(235px, 64vw) !important; }
 }
+
+
+/* Ajuste final do áudio: bolha menor, controles mais legíveis e equilibrados. */
+.msg:has(.audio-player) {
+  max-width: min(76%, 300px) !important;
+  padding: 6px 8px 5px !important;
+}
+.msg .audio-player {
+  width: min(208px, 57vw) !important;
+  gap: 7px !important;
+}
+.msg .audio-player .audio-btn {
+  flex-basis: 36px !important;
+  width: 36px !important;
+  min-width: 36px !important;
+  max-width: 36px !important;
+  height: 36px !important;
+  min-height: 36px !important;
+  max-height: 36px !important;
+}
+.msg .audio-player .audio-icone {
+  width: 19px !important;
+  height: 19px !important;
+  flex-basis: 19px !important;
+}
+.msg .audio-player .audio-meio { gap: 1px !important; }
+.msg .audio-player .audio-onda {
+  height: 17px !important;
+  min-height: 17px !important;
+  max-height: 17px !important;
+  gap: 1.5px !important;
+}
+.msg .audio-player .audio-barra {
+  min-width: 2px !important;
+  max-width: 3px !important;
+  height: var(--audio-bar-height, 11px) !important;
+}
+.msg .audio-player .audio-rodape { min-height: 11px !important; gap: 5px !important; }
+.msg .audio-player .audio-tempo { font-size: 11px !important; line-height: 1.1 !important; }
+.msg .audio-player .audio-velocidade {
+  padding: 2px 6px !important;
+  font-size: 10px !important;
+}
+@media (max-width: 480px) {
+  .msg:has(.audio-player) { max-width: 80% !important; }
+  .msg .audio-player { width: min(208px, 57vw) !important; }
+}
