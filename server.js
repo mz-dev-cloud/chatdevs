@@ -6,7 +6,6 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
-const cloudinary = require('cloudinary').v2;
 const { init, loadDB, saveDB } = require('./db');
 
 const app = express();
@@ -25,33 +24,14 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+const UPLOADS_DIR = path.join(__dirname, 'uploads');
+fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+app.use('/uploads', express.static(UPLOADS_DIR));
 
-// ---------- Upload persistente de mídia (inclui fotos e GIFs de perfil) ----------
-// O disco local do Railway é efêmero. Quando Cloudinary está configurado, os arquivos
-// ficam em armazenamento persistente e a URL HTTPS é guardada no MongoDB pelo perfil/chat.
-const cloudinaryConfigurado = Boolean(
-  process.env.CLOUDINARY_CLOUD_NAME &&
-  process.env.CLOUDINARY_API_KEY &&
-  process.env.CLOUDINARY_API_SECRET
-);
-
-if (cloudinaryConfigurado) {
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-    secure: true
-  });
-  console.log('[upload] Cloudinary habilitado para armazenamento persistente.');
-} else {
-  console.warn('[upload] Cloudinary não configurado; arquivos locais podem sumir após reinício/deploy do Railway. Configure CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY e CLOUDINARY_API_SECRET.');
-}
-
-fs.mkdirSync(path.join(__dirname, 'uploads'), { recursive: true });
+// ---------- Upload de mídia (áudio/vídeo) ----------
 const upload = multer({
-  storage: cloudinaryConfigurado ? multer.memoryStorage() : multer.diskStorage({
-    destination: (req, file, cb) => cb(null, path.join(__dirname, 'uploads')),
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, UPLOADS_DIR),
     filename: (req, file, cb) => {
       const ext = path.extname(file.originalname) || '';
       cb(null, uuidv4() + ext);
@@ -60,38 +40,17 @@ const upload = multer({
   limits: { fileSize: 25 * 1024 * 1024 } // 25MB
 });
 
-function enviarParaCloudinary(file) {
-  return new Promise((resolve, reject) => {
-    const tipo = String(file.mimetype || 'application/octet-stream');
-    const resourceType = tipo.startsWith('image/') ? 'image' :
-      (tipo.startsWith('video/') || tipo.startsWith('audio/') ? 'video' : 'raw');
-    const stream = cloudinary.uploader.upload_stream({
-      folder: 'chatdevs',
-      resource_type: resourceType,
-      public_id: uuidv4(),
-      overwrite: false,
-      use_filename: false
-    }, (error, result) => {
-      if (error) return reject(error);
-      resolve(result);
-    });
-    stream.end(file.buffer);
-  });
-}
-
-app.post('/api/upload', upload.single('file'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'Nenhum arquivo enviado' });
-  try {
-    if (cloudinaryConfigurado) {
-      const resultado = await enviarParaCloudinary(req.file);
-      return res.json({ url: resultado.secure_url, filename: resultado.public_id, persistent: true });
+app.post('/api/upload', (req, res) => {
+  upload.single('file')(req, res, err => {
+    if (err) {
+      const status = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400;
+      return res.status(status).json({ error: status === 413 ? 'Arquivo excede o limite de 25 MB.' : 'Falha ao receber o arquivo.' });
     }
-    // Fallback local para não quebrar uploads durante configuração; não é persistente no Railway.
-    return res.json({ url: '/uploads/' + req.file.filename, filename: req.file.filename, persistent: false });
-  } catch (error) {
-    console.error('[upload] Falha no Cloudinary:', error.message);
-    return res.status(502).json({ error: 'Não foi possível armazenar o arquivo. Confira as variáveis do Cloudinary no Railway.' });
-  }
+    if (!req.file || !req.file.filename || !req.file.size) {
+      return res.status(400).json({ error: 'Nenhum arquivo válido foi enviado.' });
+    }
+    return res.json({ url: '/uploads/' + req.file.filename, filename: req.file.filename, size: req.file.size, mimeType: req.file.mimetype });
+  });
 });
 
 // ---------- Helpers ----------
@@ -102,22 +61,7 @@ function getClientIp(req) {
 }
 
 function publicUser(u) {
-  return {
-    id: u.id, username: u.username, email: u.email, photoUrl: u.photoUrl || null,
-    bio: u.bio || '', phone: u.phone || '', ringColor: u.ringColor || '#ffb454',
-    socials: Array.isArray(u.socials) ? u.socials : []
-  };
-}
-
-const SOCIALS_PERMITIDAS = new Set(['instagram', 'tiktok', 'youtube', 'facebook', 'x']);
-function normalizarSocials(socials) {
-  if (!Array.isArray(socials)) return [];
-  return socials.slice(0, 5).map(item => {
-    const network = String(item && item.network || '').toLowerCase();
-    const handle = String(item && item.handle || '').trim().replace(/^@+/, '').slice(0, 100);
-    if (!SOCIALS_PERMITIDAS.has(network) || !handle) return null;
-    return { network, handle };
-  }).filter(Boolean);
+  return { id: u.id, username: u.username, email: u.email, photoUrl: u.photoUrl || null };
 }
 
 function findUserByEmailOrUsername(db, query) {
@@ -337,24 +281,6 @@ app.post('/api/users/:userId/photo', (req, res) => {
   res.json({ ok: true, user: publicUser(user) });
 });
 
-// ---------- Atualizar campos do perfil próprio ----------
-app.post('/api/users/:userId/profile', (req, res) => {
-  const { userId } = req.params;
-  if (req.body.userId !== userId) return res.status(403).json({ error: 'Você só pode editar seu próprio perfil.' });
-  const db = loadDB();
-  const user = db.users.find(u => u.id === userId);
-  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
-  const bio = String(req.body.bio || '').trim().slice(0, 240);
-  const phone = String(req.body.phone || '').trim().slice(0, 30);
-  const ringColor = /^#[0-9a-fA-F]{6}$/.test(String(req.body.ringColor || '')) ? req.body.ringColor : '#ffb454';
-  user.bio = bio;
-  user.phone = phone;
-  user.ringColor = ringColor;
-  user.socials = normalizarSocials(req.body.socials);
-  saveDB(db);
-  res.json({ ok: true, user: publicUser(user) });
-});
-
 // ---------- Buscar usuário (pra iniciar conversa) ----------
 app.get('/api/find-user', (req, res) => {
   const { query, viewerId } = req.query;
@@ -402,11 +328,7 @@ app.get('/api/users/:userId/public', (req, res) => {
   res.json({
     id: user.id,
     username: user.username,
-    photoUrl: fotoParaViewer(db, user, viewerId),
-    bio: user.bio || '',
-    phone: user.phone || '',
-    ringColor: user.ringColor || '#ffb454',
-    socials: normalizarSocials(user.socials)
+    photoUrl: fotoParaViewer(db, user, viewerId)
   });
 });
 
@@ -1332,6 +1254,11 @@ io.on('connection', socket => {
   });
 
   socket.on('send_message', ({ chatId, userId, type, content, replyTo, mediaUrl }) => {
+    const tiposComMidia = ['audio', 'video', 'image', 'file'];
+    if (tiposComMidia.includes(type) && (typeof mediaUrl !== 'string' || !mediaUrl.trim())) {
+      socket.emit('send_message_error', { message: 'A mídia não foi carregada. Tente enviar novamente.' });
+      return;
+    }
     const db = loadDB();
     const chat = db.chats.find(c => c.id === chatId);
     if (!chat || !chat.members.includes(userId)) return;
