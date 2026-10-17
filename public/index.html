@@ -220,17 +220,17 @@
         <!-- Conversa aberta -->
         <div id="chat-view" class="chat-view oculto">
           <div class="chat-header">
-            <button class="btn-link" onclick="voltarHome()">← Voltar</button>
-            <div class="chat-header-info" id="chat-header-info" onclick="abrirInfoConversa()">
+            <button class="chat-back-btn" onclick="voltarHome()" title="Voltar às conversas" aria-label="Voltar às conversas"><i class="mdi mdi-arrow-left"></i></button>
+            <div class="chat-header-info" id="chat-header-info" onclick="abrirInfoConversa()" role="button" tabindex="0" aria-label="Informações do contato">
               <div class="avatar-circle avatar-circle--sm" id="chat-header-avatar"><span id="chat-header-avatar-letra"></span></div>
-              <span id="chat-header-nome">Conversa</span>
+              <div class="chat-header-contact-copy"><span id="chat-header-nome">Conversa</span><small id="chat-header-status">Status indisponível</small></div>
             </div>
             <button class="menu-dots-btn oculto" id="btn-pedidos-grupo" onclick="abrirPedidosPendentes(chatAtualId)" title="Pedidos de entrada" aria-label="Pedidos de entrada pendentes">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               <span id="badge-pedidos-grupo" class="config-grupo-badge badge-flutuante oculto"></span>
             </button>
             <div class="dropdown-wrap">
-              <button class="menu-dots-btn" onclick="alternarDropdown('menu-chat-atual')" aria-label="Opções da conversa">⋮</button>
+              <button class="menu-dots-btn chat-options-trigger" onclick="alternarDropdown('menu-chat-atual')" aria-label="Opções da conversa" aria-haspopup="true" aria-expanded="false"><i class="mdi mdi-dots-vertical" aria-hidden="true"></i></button>
               <div id="menu-chat-atual" class="dropdown-menu oculto"></div>
             </div>
           </div>
@@ -251,13 +251,13 @@
             <input id="input-texto" placeholder="Digite uma mensagem" onkeydown="if(event.key==='Enter') enviarTexto()">
             <input type="file" id="input-anexo" style="display:none" accept="image/*,.pdf,.doc,.docx,audio/*,video/*" onchange="enviarAnexo(this.files[0])">
             <button id="btn-anexo" onclick="document.getElementById('input-anexo').click()" title="Anexar foto ou arquivo" aria-label="Anexar arquivo">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 15l-5-5-9 9"/></svg>
+              <i class="mdi mdi-image-outline" aria-hidden="true"></i>
             </button>
             <button id="btn-audio" onclick="alternarGravacao('audio')" title="Gravar áudio" aria-label="Gravar áudio">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+              <i class="mdi mdi-microphone-outline" aria-hidden="true"></i>
             </button>
             <button onclick="enviarTexto()" title="Enviar" aria-label="Enviar mensagem">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              <i class="mdi mdi-send" aria-hidden="true"></i>
             </button>
           </div>
 
@@ -272,7 +272,7 @@
               <span id="barra-gravacao-timer">0:00</span>
             </div>
             <button class="btn-enviar-gravacao" onclick="enviarGravacao()" title="Enviar gravação" aria-label="Enviar gravação">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              <i class="mdi mdi-send" aria-hidden="true"></i>
             </button>
           </div>
         </div>
