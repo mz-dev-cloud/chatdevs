@@ -2,7 +2,13 @@
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
-  <title>ZapZinho</title>
+  <title>ChatDevs</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b0d13">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -32,15 +38,15 @@
     <div class="sidebar">
       <div class="sidebar-header">
         <strong id="meu-nome"></strong>
-        <button onclick="sair()" class="btn-link">Sair</button>
+        <button onclick="sair()" class="btn-link" aria-label="Sair"><i class="mdi mdi-logout-variant"></i><span>Sair</span></button>
       </div>
-      <button onclick="abrirNovaConversa()" class="btn-primary btn-small">+ Nova conversa</button>
-      <button onclick="abrirNovoGrupo()" class="btn-secondary btn-small">+ Novo grupo</button>
+      <button onclick="abrirNovaConversa()" class="btn-primary btn-small action-card"><i class="mdi mdi-message-plus-outline"></i><span>Nova conversa</span><i class="mdi mdi-arrow-up-right action-arrow"></i></button>
+      <button onclick="abrirNovoGrupo()" class="btn-secondary btn-small action-card"><i class="mdi mdi-account-group-outline"></i><span>Novo grupo</span><i class="mdi mdi-arrow-up-right action-arrow"></i></button>
       <div id="lista-chats" class="lista-chats"></div>
     </div>
 
     <div class="chat-area">
-      <div id="chat-header" class="chat-header">Selecione uma conversa</div>
+      <div id="chat-header" class="chat-header"><i class="mdi mdi-chat-processing-outline"></i><span>Selecione uma conversa</span></div>
       <div id="mensagens" class="mensagens"></div>
 
       <div id="reply-preview" class="reply-preview" style="display:none">
@@ -54,10 +60,10 @@
 
       <div class="input-area">
         <div id="mencao-popup" class="mencao-popup oculto"></div>
-        <input id="input-texto" placeholder="Digite uma mensagem" onkeydown="if(event.key==='Enter') enviarTexto()">
-        <button onclick="enviarTexto()">Enviar</button>
-        <button id="btn-audio" onclick="alternarGravacao('audio')">🎤</button>
-        <button id="btn-video" onclick="alternarGravacao('video')">🎥</button>
+        <input id="input-texto" placeholder="Escreva uma mensagem..." aria-label="Mensagem" onkeydown="if(event.key==='Enter') enviarTexto()">
+        <button onclick="enviarTexto()" aria-label="Enviar mensagem"><i class="mdi mdi-send"></i><span>Enviar</span></button>
+        <button id="btn-audio" onclick="alternarGravacao('audio')" aria-label="Gravar áudio"><i class="mdi mdi-microphone-outline"></i></button>
+        <button id="btn-video" onclick="alternarGravacao('video')" aria-label="Gravar vídeo"><i class="mdi mdi-video-outline"></i></button>
       </div>
 
       <div id="barra-gravacao" class="barra-gravacao" style="display:none">

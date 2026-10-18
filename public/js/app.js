@@ -294,9 +294,13 @@ function renderConfigModal() {
         <div class="config-grupo">
           <span class="config-label">Tema</span>
           <div class="swatches">
-            <button class="swatch-tema swatch-dark ${c.tema === 'dark' ? 'ativo' : ''}" onclick="definirConfig('tema','dark')" title="Escuro"></button>
-            <button class="swatch-tema swatch-light ${c.tema === 'light' ? 'ativo' : ''}" onclick="definirConfig('tema','light')" title="Claro"></button>
-            <button class="swatch-tema swatch-amoled ${c.tema === 'amoled' ? 'ativo' : ''}" onclick="definirConfig('tema','amoled')" title="Preto puro"></button>
+            <button class="swatch-tema swatch-dark ${c.tema === 'dark' ? 'ativo' : ''}" onclick="definirConfig('tema','dark')" title="Grafite premium" aria-label="Tema grafite"></button>
+            <button class="swatch-tema swatch-light ${c.tema === 'light' ? 'ativo' : ''}" onclick="definirConfig('tema','light')" title="Claro" aria-label="Tema claro"></button>
+            <button class="swatch-tema swatch-amoled ${c.tema === 'amoled' ? 'ativo' : ''}" onclick="definirConfig('tema','amoled')" title="Preto AMOLED" aria-label="Tema AMOLED"></button>
+            <button class="swatch-tema swatch-midnight ${c.tema === 'midnight' ? 'ativo' : ''}" onclick="definirConfig('tema','midnight')" title="Meia-noite" aria-label="Tema meia-noite"></button>
+            <button class="swatch-tema swatch-ocean ${c.tema === 'ocean' ? 'ativo' : ''}" onclick="definirConfig('tema','ocean')" title="Oceano" aria-label="Tema oceano"></button>
+            <button class="swatch-tema swatch-violet ${c.tema === 'violet' ? 'ativo' : ''}" onclick="definirConfig('tema','violet')" title="Violeta" aria-label="Tema violeta"></button>
+            <button class="swatch-tema swatch-forest ${c.tema === 'forest' ? 'ativo' : ''}" onclick="definirConfig('tema','forest')" title="Floresta" aria-label="Tema floresta"></button>
           </div>
         </div>
 
@@ -353,7 +357,12 @@ function alternarDropdown(id) {
   document.querySelectorAll('.dropdown-menu').forEach(el => {
     if (el.id !== id) el.classList.add('oculto');
   });
-  document.getElementById(id).classList.toggle('oculto');
+  const menu = document.getElementById(id);
+  if (!menu) return;
+  const abrir = menu.classList.contains('oculto');
+  menu.classList.toggle('oculto', !abrir);
+  const trigger = menu.closest('.dropdown-wrap')?.querySelector('button');
+  if (trigger) trigger.setAttribute('aria-expanded', String(abrir));
 }
 document.addEventListener('click', e => {
   if (!e.target.closest('.dropdown-wrap')) {
@@ -427,6 +436,9 @@ function entrarNoChat() {
 
   socket = io();
   socket.emit('join', { userId: usuarioAtual.id });
+  socket.on('send_message_error', payload => {
+    mostrarAviso(payload && payload.message ? payload.message : 'Não foi possível enviar a mídia.');
+  });
 
   socket.on('new_message', msg => {
     if (msg.chatId === chatAtualId) {
@@ -586,7 +598,7 @@ function renderizarListaChats() {
       ? `<span class="badge-nao-lidas">${chat.unreadCount > 99 ? '99+' : chat.unreadCount}</span>`
       : '';
 
-    const avatarHtml = `<span class="avatar-circle avatar-circle--sm">${avatarInnerHtml(chat.name, chat.photoUrl)}</span>`;
+    const avatarHtml = `<span class="avatar-circle avatar-circle--sm avatar-perfil-abrir" role="button" tabindex="0" title="Ver perfil">${avatarInnerHtml(chat.name, chat.photoUrl)}</span>`;
 
     div.innerHTML = `
       <div class="item-chat-topo">
@@ -600,6 +612,11 @@ function renderizarListaChats() {
         <div class="preview">${escapeHtml(chat.lastMessage || 'Sem mensagens ainda')}</div>
         ${badgeHtml}
       </div>`;
+    const avatarBtn = div.querySelector('.avatar-perfil-abrir');
+    if (avatarBtn && chat.type !== 'group' && chat.otherUserId) {
+      avatarBtn.addEventListener('click', e => { e.stopPropagation(); abrirPerfilUsuario(chat.otherUserId); });
+      avatarBtn.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); abrirPerfilUsuario(chat.otherUserId); } });
+    }
     container.appendChild(div);
   });
 }
@@ -642,13 +659,13 @@ function abrirMenuChatItem(event, chatId) {
   if (!chat) return;
 
   const itens = chat.removidoDoGrupo
-    ? `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}', true)">Apagar conversa</div>`
+    ? `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}', true)"><span>Apagar conversa</span></div>`
     : chat.type === 'group'
-    ? `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); abrirConfigGrupo('${chat.id}')">Configurações do grupo</div>
-       <div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}')">Apagar conversa</div>
-       <div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); sairDoGrupo('${chat.id}')">Sair do grupo</div>`
-    : `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}')">Apagar conversa</div>
-       ${chat.ehAutoConversa ? '' : `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); bloquearUsuario('${chat.otherUserId}', '${chat.id}')">Bloquear usuário</div>`}`;
+    ? `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); abrirConfigGrupo('${chat.id}')"><span>Configurações do grupo</span></div>
+       <div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}')"><span>Apagar conversa</span></div>
+       <div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); sairDoGrupo('${chat.id}')"><span>Sair do grupo</span></div>`
+    : `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}')"><span>Apagar conversa</span></div>
+       ${chat.ehAutoConversa ? '' : `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); bloquearUsuario('${chat.otherUserId}', '${chat.id}')"><span>Bloquear usuário</span></div>`}`;
 
   abrirMenuFlutuante(event.currentTarget, itens);
 }
@@ -915,11 +932,34 @@ async function abrirNovoGrupo() {
   carregarStats();
 }
 
+// Status do cabeçalho: usa apenas presença/último acesso quando a API fornece esses dados.
+function atualizarStatusCabecalho(contato, tipo) {
+  const el = document.getElementById('chat-header-status');
+  if (!el) return;
+  el.classList.remove('is-online');
+  if (tipo === 'group') { el.textContent = 'Grupo'; return; }
+  if (!contato) { el.textContent = 'Status não compartilhado'; return; }
+  const online = contato.online === true || contato.isOnline === true || contato.is_online === true;
+  const ultimo = contato.lastSeen || contato.last_seen || contato.lastSeenAt || contato.last_seen_at || contato.lastActiveAt;
+  if (online) { el.textContent = 'Online'; el.classList.add('is-online'); return; }
+  if (ultimo) {
+    const d = new Date(ultimo);
+    if (!Number.isNaN(d.getTime())) {
+      const hora = new Intl.DateTimeFormat('pt-BR', { hour: '2-digit', minute: '2-digit' }).format(d);
+      const data = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
+      el.textContent = `Visto por último ${hora} • ${data}`;
+      return;
+    }
+  }
+  el.textContent = 'Status não compartilhado';
+}
+
 // ---------- Abrir um chat ----------
 async function abrirChat(chatId, nome, tipo, outroId, outroEmail, removidoDoGrupo, photoUrl) {
   chatAtualId = chatId;
   chatAtualTipo = tipo || 'private';
-  chatAtualOutro = outroId ? { id: outroId, username: nome, email: outroEmail || null, photoUrl: photoUrl || null } : null;
+  const contatoAnterior = (chatAtualOutro && String(chatAtualOutro.id) === String(outroId)) ? chatAtualOutro : null;
+  chatAtualOutro = outroId ? { ...(contatoAnterior || {}), id: outroId, username: nome, email: outroEmail || null, photoUrl: photoUrl || null } : null;
   chatAtualRemovido = !!removidoDoGrupo;
   chatAtualModoEnvio = 'todos';
   chatAtualSouAdmin = false;
@@ -930,11 +970,15 @@ async function abrirChat(chatId, nome, tipo, outroId, outroEmail, removidoDoGrup
 
   document.getElementById('chat-header-nome').textContent = nome;
   document.getElementById('chat-header-avatar').innerHTML = avatarInnerHtml(nome, photoUrl || null);
+  const headerAvatar = document.getElementById('chat-header-avatar');
+  if (headerAvatar) { headerAvatar.style.cursor = tipo === 'group' ? 'default' : 'pointer'; headerAvatar.onclick = () => { if (tipo !== 'group' && chatAtualOutro) abrirPerfilUsuario(chatAtualOutro.id); }; }
+  atualizarStatusCabecalho(chatAtualOutro, chatAtualTipo);
   document.getElementById('home-view').classList.add('oculto');
   document.getElementById('chat-view').classList.remove('oculto');
   mostrarPainelMobile();
   renderContatoBanner();
   renderMenuChatAtual();
+  aplicarAparenciaChat();
   aplicarModoSomenteLeitura();
 
   socket.emit('join_chat', chatId); // se for fantasma, o servidor ignora isso e não recebe mensagem nova
@@ -1077,19 +1121,96 @@ function renderMenuChatAtual() {
   if (!chatAtualId) { el.innerHTML = ''; return; }
 
   if (chatAtualRemovido) {
-    el.innerHTML = `<div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId, true)">Apagar conversa</div>`;
+    el.innerHTML = `<div class="dropdown-item dropdown-clicavel" onclick="document.getElementById('menu-chat-atual').classList.add('oculto'); document.querySelector('.chat-options-trigger')?.setAttribute('aria-expanded','false'); abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i><span>Aparência do chat</span></div><div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId, true)"><span>Apagar conversa</span></div>`;
     return;
   }
 
   const ehAutoConversa = chatAtualOutro && chatAtualOutro.id === usuarioAtual.id;
 
   el.innerHTML = chatAtualTipo === 'group'
-    ? `<div class="dropdown-item dropdown-clicavel" onclick="abrirConfigGrupo(chatAtualId)">Configurações do grupo</div>
-       <div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId)">Apagar conversa</div>
-       <div class="dropdown-item dropdown-clicavel" onclick="sairDoGrupo(chatAtualId)">Sair do grupo</div>`
-    : `<div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId)">Apagar conversa</div>
-       ${ehAutoConversa ? '' : `<div class="dropdown-item dropdown-clicavel" onclick="bloquearUsuario(chatAtualOutro && chatAtualOutro.id, chatAtualId)">Bloquear usuário</div>`}`;
+    ? `<div class="dropdown-item dropdown-clicavel" onclick="document.getElementById('menu-chat-atual').classList.add('oculto'); document.querySelector('.chat-options-trigger')?.setAttribute('aria-expanded','false'); abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i><span>Aparência do chat</span></div>
+       <div class="dropdown-item dropdown-clicavel" onclick="abrirConfigGrupo(chatAtualId)"><span>Configurações do grupo</span></div>
+       <div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId)"><span>Apagar conversa</span></div>
+       <div class="dropdown-item dropdown-clicavel" onclick="sairDoGrupo(chatAtualId)"><span>Sair do grupo</span></div>`
+    : `<div class="dropdown-item dropdown-clicavel" onclick="document.getElementById('menu-chat-atual').classList.add('oculto'); document.querySelector('.chat-options-trigger')?.setAttribute('aria-expanded','false'); abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i><span>Aparência do chat</span></div>
+       <div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId)"><span>Apagar conversa</span></div>
+       ${ehAutoConversa ? '' : `<div class="dropdown-item dropdown-clicavel" onclick="bloquearUsuario(chatAtualOutro && chatAtualOutro.id, chatAtualId)"><span>Bloquear usuário</span></div>`}`;
 }
+
+// ---------- Personalização visual da conversa ----------
+const CHAT_APPEAR_KEY = 'chatdevs_aparencia_conversa_v1';
+function lerAparenciaChat() {
+  try { return Object.assign({ cor: '#ffb454', opacidade: 92, estilo: 'suave', tamanhoTexto: 14, wallpaper: '' }, JSON.parse(localStorage.getItem(CHAT_APPEAR_KEY) || '{}')); }
+  catch (_) { return { cor: '#ffb454', opacidade: 92, estilo: 'suave', tamanhoTexto: 14, wallpaper: '' }; }
+}
+function salvarAparenciaChat(cfg) {
+  localStorage.setItem(CHAT_APPEAR_KEY, JSON.stringify(cfg));
+  aplicarAparenciaChat();
+}
+function aplicarAparenciaChat() {
+  const cfg = lerAparenciaChat();
+  const mensagens = document.getElementById('mensagens');
+  if (!mensagens) return;
+  mensagens.style.setProperty('--chat-bubble-color', cfg.cor);
+  mensagens.style.setProperty('--chat-bubble-opacity', `${Math.max(20, Math.min(100, Number(cfg.opacidade) || 92))}%`);
+  mensagens.dataset.bubbleStyle = cfg.estilo || 'suave';
+  mensagens.style.setProperty('--chat-bubble-font-size', `${Math.max(12, Math.min(22, Number(cfg.tamanhoTexto) || 14))}px`);
+  if (cfg.wallpaper) {
+    mensagens.style.setProperty('--chat-wallpaper-image', `url("${cfg.wallpaper}")`);
+    mensagens.classList.add('com-wallpaper');
+  } else {
+    mensagens.style.removeProperty('--chat-wallpaper-image');
+    mensagens.classList.remove('com-wallpaper');
+  }
+}
+function abrirAparenciaChat() {
+  document.querySelectorAll('.dropdown-menu').forEach(el => el.classList.add('oculto'));
+  const cfg = lerAparenciaChat();
+  const root = document.getElementById('modal-root');
+  if (!root) return;
+  const anterior = document.getElementById('modal-aparencia-chat'); if (anterior) anterior.remove();
+  const modal = document.createElement('div');
+  modal.id = 'modal-aparencia-chat'; modal.className = 'chat-appearance-backdrop';
+  modal.innerHTML = `
+    <section class="chat-appearance-panel" role="dialog" aria-modal="true" aria-labelledby="appearance-title">
+      <header class="appearance-head"><div><span class="appearance-eyebrow">PERSONALIZAÇÃO</span><h2 id="appearance-title">A aparência do seu chat</h2><p>Deixe a conversa com a sua identidade.</p></div><button type="button" class="appearance-close" aria-label="Fechar" data-close>×</button></header>
+      <div class="appearance-content">
+        <label class="appearance-label" for="bubble-color">Cor das bolhas</label>
+        <div class="appearance-color-row"><input id="bubble-color" type="color" value="${cfg.cor}"><div class="appearance-swatches">${['#ffb454','#8b5cf6','#38bdf8','#34d399','#fb7185','#f1f5f9'].map(c=>`<button type="button" class="appearance-swatch" data-color="${c}" style="--swatch:${c}" aria-label="Cor ${c}"></button>`).join('')}</div></div>
+        <div class="appearance-range-head"><label class="appearance-label" for="bubble-opacity">Opacidade das bolhas</label><output id="bubble-opacity-value">${cfg.opacidade}%</output></div>
+        <input class="appearance-range" id="bubble-opacity" type="range" min="20" max="100" step="5" value="${cfg.opacidade}">
+        <div class="appearance-range-head"><label class="appearance-label" for="bubble-text-size">Tamanho do texto nas bolhas</label><output id="bubble-text-size-value">${Math.max(12, Math.min(22, Number(cfg.tamanhoTexto) || 14))} px</output></div>
+        <input class="appearance-range" id="bubble-text-size" type="range" min="12" max="22" step="1" value="${Math.max(12, Math.min(22, Number(cfg.tamanhoTexto) || 14))}">
+        <label class="appearance-label">Estilo das bolhas</label><div class="appearance-styles"><button type="button" data-style="suave" class="appearance-style ${cfg.estilo==='suave'?'selected':''}"><span class="style-preview style-soft"></span><b>Suave</b><small>Arredondado</small></button><button type="button" data-style="compacto" class="appearance-style ${cfg.estilo==='compacto'?'selected':''}"><span class="style-preview style-compact"></span><b>Compacto</b><small>Mais discreto</small></button><button type="button" data-style="vidro" class="appearance-style ${cfg.estilo==='vidro'?'selected':''}"><span class="style-preview style-glass"></span><b>Vidro</b><small>Translúcido</small></button></div>
+        <label class="appearance-label">Papel de parede</label><div class="wallpaper-actions"><button type="button" class="appearance-upload" id="appearance-upload"><i class="mdi mdi-image-plus-outline"></i><span><b>Escolher imagem</b><small>Use uma imagem do seu dispositivo</small></span><i class="mdi mdi-chevron-right"></i></button><input type="file" id="appearance-wallpaper-file" accept="image/*" hidden><button type="button" class="appearance-remove" id="appearance-remove" ${cfg.wallpaper?'':'disabled'}><i class="mdi mdi-image-remove-outline"></i> Remover imagem e voltar ao fundo padrão</button></div>
+      </div><footer class="appearance-footer"><button type="button" class="appearance-reset" id="appearance-reset">Restaurar padrão</button><button type="button" class="appearance-done" data-close>Aplicar alterações</button></footer>
+    </section>`;
+  root.appendChild(modal);
+  const color = modal.querySelector('#bubble-color'), opacity = modal.querySelector('#bubble-opacity'), textSize = modal.querySelector('#bubble-text-size');
+  const update = () => { const next = {...lerAparenciaChat(), cor: color.value, opacidade: Number(opacity.value), tamanhoTexto: Number(textSize.value)}; modal.querySelector('#bubble-opacity-value').textContent = `${opacity.value}%`; modal.querySelector('#bubble-text-size-value').textContent = `${textSize.value} px`; salvarAparenciaChat(next); };
+  color.addEventListener('input', update); opacity.addEventListener('input', update); textSize.addEventListener('input', update);
+  modal.querySelectorAll('[data-color]').forEach(b=>b.addEventListener('click',()=>{color.value=b.dataset.color;update();}));
+  modal.querySelectorAll('[data-style]').forEach(b=>b.addEventListener('click',()=>{modal.querySelectorAll('[data-style]').forEach(x=>x.classList.toggle('selected',x===b));salvarAparenciaChat({...lerAparenciaChat(),estilo:b.dataset.style});}));
+  modal.querySelector('#appearance-upload').addEventListener('click',()=>modal.querySelector('#appearance-wallpaper-file').click());
+  modal.querySelector('#appearance-wallpaper-file').addEventListener('change', async e=>{
+    const file=e.target.files && e.target.files[0]; if(!file)return;
+    if(!file.type.startsWith('image/')){mostrarAviso('Escolha um arquivo de imagem.');return;}
+    if(file.size>12*1024*1024){mostrarAviso('A imagem deve ter no máximo 12 MB.');return;}
+    try {
+      const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsDataURL(file);});
+      const img=await new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=reject;im.src=data;});
+      const scale=Math.min(1,1600/Math.max(img.width,img.height)); const canvas=document.createElement('canvas');canvas.width=Math.round(img.width*scale);canvas.height=Math.round(img.height*scale);canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
+      const wallpaper=canvas.toDataURL('image/jpeg',0.82); const next={...lerAparenciaChat(),wallpaper};
+      try{localStorage.setItem(CHAT_APPEAR_KEY,JSON.stringify(next));}catch(_){mostrarAviso('Imagem muito grande para salvar neste dispositivo. Escolha uma imagem menor.');return;}
+      aplicarAparenciaChat();modal.querySelector('#appearance-remove').disabled=false;mostrarAviso('Papel de parede aplicado neste dispositivo.','sucesso');
+    }catch(_){mostrarAviso('Não foi possível carregar essa imagem.');}
+  });
+  modal.querySelector('#appearance-remove').addEventListener('click',()=>{salvarAparenciaChat({...lerAparenciaChat(),wallpaper:''});modal.querySelector('#appearance-remove').disabled=true;});
+  modal.querySelector('#appearance-reset').addEventListener('click',()=>{salvarAparenciaChat({cor:'#ffb454',opacidade:92,estilo:'suave',tamanhoTexto:14,wallpaper:''});modal.remove();abrirAparenciaChat();});
+  modal.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>modal.remove()));
+  modal.addEventListener('click',e=>{if(e.target===modal)modal.remove();});
+}
+document.addEventListener('DOMContentLoaded', aplicarAparenciaChat);
 
 // ---------- Configurações do grupo (dono/admin, remover pessoas) ----------
 async function abrirConfigGrupo(chatId) {
@@ -1817,18 +1938,14 @@ function atualizarAvatarTopo() {
   document.getElementById('avatar-topo').innerHTML = avatarInnerHtml(usuarioAtual.username, usuarioAtual.photoUrl);
 }
 
-// ---------- Janela de editar perfil (foto + privacidade dela) ----------
+// ---------- Janela de editar perfil completo ----------
 async function abrirEditarPerfil() {
   const root = document.getElementById('modal-root');
   const respPriv = await fetch(`/api/users/${usuarioAtual.id}/photo-privacy`);
-  const priv = await respPriv.json();
-
-  const acoesFotoHtml = `
-    <div class="info-grupo-acoes-foto">
-      <button class="link-sutil" id="perfil-trocar-foto" type="button">Trocar foto</button>
-      ${usuarioAtual.photoUrl ? `<button class="link-sutil" id="perfil-remover-foto" type="button">Remover foto</button>` : ''}
-    </div>`;
-
+  const priv = await respPriv.json().catch(() => ({ privacy: 'todos', allowList: [] }));
+  const sociais = Array.isArray(usuarioAtual.socials) ? usuarioAtual.socials : [];
+  const socialAtual = network => (sociais.find(s => s.network === network) || {}).handle || '';
+  const ring = /^#[0-9a-fA-F]{6}$/.test(usuarioAtual.ringColor || '') ? usuarioAtual.ringColor : '#ffb454';
   const opcoesPrivacidade = [
     { valor: 'todos', label: 'Todos podem ver' },
     { valor: 'contatos', label: 'Só meus contatos' },
@@ -1836,58 +1953,79 @@ async function abrirEditarPerfil() {
     { valor: 'ninguem', label: 'Ninguém pode ver' }
   ];
   const privacidadeAtual = priv.privacy || 'todos';
-
+  const socials = [
+    { id: 'instagram', label: 'Instagram', placeholder: 'seu.usuario' },
+    { id: 'tiktok', label: 'TikTok', placeholder: 'seu.usuario' },
+    { id: 'youtube', label: 'YouTube', placeholder: '@seucanal ou ID' },
+    { id: 'facebook', label: 'Facebook', placeholder: 'seu.usuario ou página' },
+    { id: 'x', label: 'X (Twitter)', placeholder: 'seu.usuario' }
+  ];
   const privacidadeHtml = `
     <div class="config-grupo">
       <span class="config-label">Quem pode ver sua foto de perfil</span>
       <div class="privacidade-opcoes">
         ${opcoesPrivacidade.map(o => `
-          <label class="privacidade-opcao">
-            <input type="radio" name="foto-privacidade" value="${o.valor}" ${privacidadeAtual === o.valor ? 'checked' : ''}>
-            ${o.label}
-          </label>`).join('')}
+          <label class="privacidade-opcao"><input type="radio" name="foto-privacidade" value="${o.valor}" ${privacidadeAtual === o.valor ? 'checked' : ''}> ${o.label}</label>`).join('')}
       </div>
       <div id="privacidade-lista-wrap" class="${privacidadeAtual === 'lista' ? '' : 'oculto'}">
-        <div class="convite-link-row">
-          <input class="modal-input" id="privacidade-lista-busca" type="text" placeholder="Adicionar por email ou usuário">
-          <button class="btn-outline btn-compacto" id="privacidade-lista-add">Adicionar</button>
-        </div>
+        <div class="convite-link-row"><input class="modal-input" id="privacidade-lista-busca" type="text" placeholder="Adicionar por email ou usuário"><button class="btn-outline btn-compacto" id="privacidade-lista-add">Adicionar</button></div>
         <div id="privacidade-lista-itens" class="lista-contatos">${renderListaPrivacidadeItens(priv.allowList)}</div>
       </div>
     </div>`;
-
   root.innerHTML = `
     <div class="modal-overlay" id="modal-overlay">
-      <div class="modal-box">
-        <div class="info-grupo-topo">
-          <div class="avatar-circle avatar-circle--lg">${avatarInnerHtml(usuarioAtual.username, usuarioAtual.photoUrl)}</div>
+      <div class="modal-box modal-box--perfil-editor">
+        <div class="perfil-editor-cabecalho">
+          <button class="perfil-fechar-x" id="perfil-fechar-x" type="button" aria-label="Fechar perfil">×</button>
+          <div class="avatar-circle avatar-circle--lg perfil-editor-avatar" style="border-color:${escapeAttr(ring)}">${avatarInnerHtml(usuarioAtual.username, usuarioAtual.photoUrl)}</div>
           <h3 class="modal-title info-grupo-nome">${escapeHtml(usuarioAtual.username)}</h3>
-          ${acoesFotoHtml}
-          <input type="file" id="perfil-foto-input" accept="image/*" style="display:none">
+          <p class="perfil-editor-subtitulo">Seu perfil, do seu jeito</p>
+          <div class="info-grupo-acoes-foto">
+            <button class="link-sutil" id="perfil-trocar-foto" type="button">Trocar foto / GIF</button>
+            ${usuarioAtual.photoUrl ? '<button class="link-sutil" id="perfil-remover-foto" type="button">Remover foto</button>' : ''}
+          </div>
+          <input type="file" id="perfil-foto-input" accept="image/*,.gif" style="display:none">
+        </div>
+        <div class="perfil-editor-campos">
+          <label class="perfil-campo"><span>Bio <small>até 240 caracteres</small></span><textarea id="perfil-bio-input" maxlength="240" rows="3" placeholder="Uma frase sobre você...">${escapeHtml(usuarioAtual.bio || '')}</textarea></label>
+          <label class="perfil-campo"><span>Número de contato</span><input id="perfil-phone-input" type="tel" maxlength="30" value="${escapeAttr(usuarioAtual.phone || '')}" placeholder="+55 11 99999-9999" autocomplete="tel"></label>
+          <label class="perfil-campo perfil-campo-cor"><span>Cor da borda da foto</span><input id="perfil-ring-color" type="color" value="${escapeAttr(ring)}"></label>
+          <div class="perfil-socials"><span class="config-label">Suas redes sociais</span><p class="perfil-ajuda">Adicione o usuário; o link será criado automaticamente no seu perfil.</p>
+            ${socials.map(net => `<label class="perfil-campo perfil-social-campo"><span>${net.label}</span><input data-social="${net.id}" maxlength="100" value="${escapeAttr(socialAtual(net.id))}" placeholder="${net.placeholder}"></label>`).join('')}
+          </div>
         </div>
         ${privacidadeHtml}
-        <div class="modal-actions">
-          <button class="btn-ok btn-compacto" id="perfil-fechar" type="button">Fechar</button>
-        </div>
+        <div class="modal-actions perfil-editor-acoes"><button class="btn-outline btn-compacto" id="perfil-cancelar" type="button">Fechar</button><button class="btn-ok btn-compacto" id="perfil-salvar" type="button">Salvar perfil</button></div>
       </div>
     </div>`;
-
-  document.getElementById('perfil-fechar').onclick = () => { root.innerHTML = ''; };
-  document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') root.innerHTML = ''; };
+  const fechar = () => { root.innerHTML = ''; };
+  document.getElementById('perfil-fechar-x').onclick = fechar;
+  document.getElementById('perfil-cancelar').onclick = fechar;
+  document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') fechar(); };
   document.getElementById('perfil-trocar-foto').onclick = () => document.getElementById('perfil-foto-input').click();
-  document.getElementById('perfil-foto-input').onchange = e => {
-    if (e.target.files[0]) trocarFotoPerfil(e.target.files[0]);
-  };
+  document.getElementById('perfil-foto-input').onchange = e => { if (e.target.files[0]) trocarFotoPerfil(e.target.files[0]); };
   const btnRemover = document.getElementById('perfil-remover-foto');
   if (btnRemover) btnRemover.onclick = () => trocarFotoPerfil(null);
-
-  document.querySelectorAll('input[name="foto-privacidade"]').forEach(radio => {
-    radio.onchange = () => mudarPrivacidadeFoto(radio.value);
-  });
-
+  document.getElementById('perfil-ring-color').oninput = e => {
+    const avatar = document.querySelector('.perfil-editor-avatar'); if (avatar) avatar.style.borderColor = e.target.value;
+  };
+  document.querySelectorAll('input[name="foto-privacidade"]').forEach(radio => { radio.onchange = () => mudarPrivacidadeFoto(radio.value); });
   const inputBusca = document.getElementById('privacidade-lista-busca');
   document.getElementById('privacidade-lista-add').onclick = () => adicionarNaListaPrivacidade(inputBusca.value.trim());
   inputBusca.addEventListener('keydown', e => { if (e.key === 'Enter') adicionarNaListaPrivacidade(inputBusca.value.trim()); });
+  document.getElementById('perfil-salvar').onclick = async () => {
+    const socials = Array.from(document.querySelectorAll('[data-social]')).map(el => ({ network: el.dataset.social, handle: el.value.trim() })).filter(x => x.handle);
+    const resp = await fetch(`/api/users/${usuarioAtual.id}/profile`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: usuarioAtual.id, bio: document.getElementById('perfil-bio-input').value, phone: document.getElementById('perfil-phone-input').value, ringColor: document.getElementById('perfil-ring-color').value, socials }) });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) { mostrarAviso(data.error || 'Não foi possível salvar o perfil.'); return; }
+    usuarioAtual = { ...usuarioAtual, ...data.user };
+    localStorage.setItem('usuario', JSON.stringify(usuarioAtual));
+    const contas = carregarContas().map(c => c.id === usuarioAtual.id ? { ...c, ...data.user } : c);
+    localStorage.setItem('contas', JSON.stringify(contas));
+    atualizarAvatarTopo();
+    abrirEditarPerfil();
+    mostrarAviso('Perfil atualizado!', 'sucesso');
+  };
 }
 
 // ---------- Linhas da lista seleta (dentro da privacidade da foto) ----------
@@ -2239,7 +2377,13 @@ async function alternarGravacao(tipo) {
         chunksGravacao = [];
         return; // gravação cancelada ou nada foi gravado
       }
-      const blob = new Blob(chunksGravacao, { type: tipo === 'video' ? 'video/webm' : 'audio/webm' });
+      const mimeType = (gravador && gravador.mimeType) || (chunksGravacao.find(c => c.type) || {}).type || (tipo === 'video' ? 'video/webm' : 'audio/webm');
+      const blob = new Blob(chunksGravacao, { type: mimeType });
+      chunksGravacao = [];
+      if (!blob.size) {
+        mostrarAviso('A gravação ficou vazia. Tente gravar novamente.');
+        return;
+      }
       await enviarMidia(blob, tipo);
     };
 
@@ -2310,50 +2454,76 @@ function enviarGravacao() {
 }
 
 async function enviarMidia(blob, tipo) {
+  if (!blob || !blob.size) {
+    mostrarAviso('O áudio ficou vazio. Grave novamente antes de enviar.');
+    return;
+  }
+  if (!chatAtualId || !usuarioAtual || !usuarioAtual.id || !socket) {
+    mostrarAviso('Abra uma conversa antes de enviar o áudio.');
+    return;
+  }
+
+  const mimeType = blob.type || (tipo === 'video' ? 'video/webm' : 'audio/webm');
+  const extensao = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : mimeType.includes('mpeg') ? 'mp3' : 'webm';
   const formData = new FormData();
-  formData.append('file', blob, tipo === 'video' ? 'video.webm' : 'audio.webm');
+  formData.append('file', blob, `${tipo}.${extensao}`);
 
-  const resp = await fetch('/api/upload', { method: 'POST', body: formData });
-  const data = await resp.json();
+  try {
+    const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || typeof data.url !== 'string' || !data.url.trim()) {
+      throw new Error(data.error || 'O servidor não confirmou o upload do áudio.');
+    }
 
-  socket.emit('send_message', {
-    chatId: chatAtualId,
-    userId: usuarioAtual.id,
-    type: tipo,
-    mediaUrl: data.url,
-    replyTo: respondendoA
-  });
-
-  cancelarResposta();
+    socket.emit('send_message', {
+      chatId: chatAtualId,
+      userId: usuarioAtual.id,
+      type: tipo,
+      mediaUrl: data.url,
+      replyTo: respondendoA
+    });
+    cancelarResposta();
+  } catch (err) {
+    console.error('Falha ao enviar mídia:', err);
+    mostrarAviso(err && err.message ? err.message : 'Não foi possível enviar o áudio. Verifique sua conexão e tente novamente.');
+  }
 }
 
 // ---------- Anexar arquivo (foto, pdf, docx, mp3 etc.) ----------
 async function enviarAnexo(file) {
-  if (!file || !chatAtualId) return;
+  if (!file || !chatAtualId || !usuarioAtual || !socket) return;
 
   const formData = new FormData();
   formData.append('file', file);
 
-  const resp = await fetch('/api/upload', { method: 'POST', body: formData });
-  if (!resp.ok) { mostrarAviso('Não deu pra enviar esse arquivo.'); return; }
-  const data = await resp.json();
+  try {
+    const resp = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok || typeof data.url !== 'string' || !data.url.trim()) {
+      throw new Error(data.error || 'O servidor não confirmou o upload do arquivo.');
+    }
 
-  const tipo = file.type.startsWith('image/') ? 'image'
-    : file.type.startsWith('audio/') ? 'audio'
-    : file.type.startsWith('video/') ? 'video'
-    : 'file';
+    const tipo = file.type.startsWith('image/') ? 'image'
+      : file.type.startsWith('audio/') ? 'audio'
+      : file.type.startsWith('video/') ? 'video'
+      : 'file';
 
-  socket.emit('send_message', {
-    chatId: chatAtualId,
-    userId: usuarioAtual.id,
-    type: tipo,
-    content: tipo === 'file' ? file.name : null,
-    mediaUrl: data.url,
-    replyTo: respondendoA
-  });
+    socket.emit('send_message', {
+      chatId: chatAtualId,
+      userId: usuarioAtual.id,
+      type: tipo,
+      content: tipo === 'file' ? file.name : null,
+      mediaUrl: data.url,
+      replyTo: respondendoA
+    });
 
-  cancelarResposta();
-  document.getElementById('input-anexo').value = '';
+    cancelarResposta();
+    const input = document.getElementById('input-anexo');
+    if (input) input.value = '';
+  } catch (err) {
+    console.error('Falha ao enviar anexo:', err);
+    mostrarAviso(err && err.message ? err.message : 'Não deu pra enviar esse arquivo.');
+  }
 }
 
 // ---------- Deslizar mensagem pra responder (tipo o Zap) ----------
@@ -2658,25 +2828,32 @@ async function abrirPerfilUsuario(userId) {
   if (!resp.ok) { mostrarAviso('Não foi possível abrir esse perfil.'); return; }
   const u = await resp.json();
   const root = document.getElementById('modal-root');
+  const ring = /^#[0-9a-fA-F]{6}$/.test(u.ringColor || '') ? u.ringColor : '#ffb454';
   const fotoHtml = u.photoUrl
-    ? `<img class="perfil-foto-grande" src="${escapeAttr(u.photoUrl)}" alt="" onclick="window.open('${escapeAttr(u.photoUrl)}','_blank')" title="Ver foto em tamanho grande">`
-    : `<div class="avatar-circle avatar-circle--lg">${avatarInnerHtml(u.username, null)}</div>`;
-  const bioHtml = u.bio
-    ? `<p class="perfil-bio">${escapeHtml(u.bio)}</p>`
-    : `<p class="perfil-bio perfil-bio--vazia">Sem bio.</p>`;
+    ? `<img class="perfil-foto-grande" style="border-color:${escapeAttr(ring)}" src="${escapeAttr(u.photoUrl)}" alt="Foto de ${escapeAttr(u.username)}" onclick="window.open('${escapeAttr(u.photoUrl)}','_blank')" title="Ver foto em tamanho grande">`
+    : `<div class="avatar-circle avatar-circle--lg perfil-editor-avatar" style="border-color:${escapeAttr(ring)}">${avatarInnerHtml(u.username, null)}</div>`;
+  const bioHtml = u.bio ? `<div class="perfil-bio-card"><span class="perfil-bio-aspas perfil-bio-aspas--abre" aria-hidden="true">“</span><p class="perfil-bio">${escapeHtml(u.bio)}</p><span class="perfil-bio-aspas perfil-bio-aspas--fecha" aria-hidden="true">”</span></div>` : `<div class="perfil-bio-card perfil-bio-card--vazia"><span class="perfil-bio-aspas perfil-bio-aspas--abre" aria-hidden="true">“</span><p class="perfil-bio perfil-bio--vazia">Sem bio.</p><span class="perfil-bio-aspas perfil-bio-aspas--fecha" aria-hidden="true">”</span></div>`;
+  const redes = Array.isArray(u.socials) ? u.socials : [];
+  const bases = { instagram: 'https://www.instagram.com/', tiktok: 'https://www.tiktok.com/@', youtube: 'https://www.youtube.com/@', facebook: 'https://www.facebook.com/', x: 'https://x.com/' };
+  const nomes = { instagram: 'Instagram', tiktok: 'TikTok', youtube: 'YouTube', facebook: 'Facebook', x: 'X' };
+  const linksHtml = redes.map(r => {
+    if (!bases[r.network] || !r.handle) return '';
+    const handle = r.handle.replace(/^@+/, '');
+    const url = bases[r.network] + encodeURIComponent(handle);
+    return `<a class="perfil-rede-link" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer"><span class="perfil-rede-icone mdi mdi-${r.network === 'x' ? 'alpha-x-circle' : r.network === 'youtube' ? 'youtube' : r.network}"></span><span class="perfil-rede-nome">${nomes[r.network]}</span><span class="perfil-rede-handle">@${escapeHtml(handle)}</span><span class="mdi mdi-open-in-new perfil-rede-externo"></span></a>`;
+  }).join('');
+  const phoneHtml = u.phone ? `<a class="perfil-contato-link" href="https://wa.me/${u.phone.replace(/\D/g, '')}" target="_blank" rel="noopener noreferrer"><span class="mdi mdi-whatsapp"></span><span>${escapeHtml(u.phone)}</span><span class="mdi mdi-open-in-new"></span></a>` : '';
   root.innerHTML = `
-    <div class="modal-overlay" id="modal-overlay">
-      <div class="modal-box modal-box--perfil">
-        <div class="info-grupo-topo">
-          ${fotoHtml}  
-          <h3 class="modal-title info-grupo-nome">${escapeHtml(u.username)}</h3>
-          ${bioHtml}
-        </div>
-        <div class="modal-actions">
-          <button class="btn-ok btn-compacto" id="perfil-usuario-fechar" type="button">Fechar</button>
-        </div>
+    <div class="modal-overlay perfil-overlay" id="modal-overlay">
+      <div class="modal-box modal-box--perfil perfil-publico-card">
+        <button class="perfil-fechar-x" id="perfil-usuario-fechar-x" type="button" aria-label="Fechar perfil">×</button>
+        <div class="perfil-publico-hero">${fotoHtml}<h3 class="modal-title info-grupo-nome">${escapeHtml(u.username)}</h3><span class="perfil-publico-tag">Perfil do ChatDevs</span>${bioHtml}</div>
+        <div class="perfil-publico-detalhes">${phoneHtml}${linksHtml ? `<div class="perfil-redes-lista">${linksHtml}</div>` : '<p class="perfil-bio perfil-bio--vazia">Nenhuma rede social adicionada.</p>'}</div>
+        <div class="modal-actions"><button class="btn-ok btn-compacto" id="perfil-usuario-fechar" type="button">Fechar perfil</button></div>
       </div>
     </div>`;
-  document.getElementById('perfil-usuario-fechar').onclick = () => { root.innerHTML = ''; };
-  document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') root.innerHTML = ''; };
+  const fechar = () => { root.innerHTML = ''; };
+  document.getElementById('perfil-usuario-fechar').onclick = fechar;
+  document.getElementById('perfil-usuario-fechar-x').onclick = fechar;
+  document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') fechar(); };
 }
