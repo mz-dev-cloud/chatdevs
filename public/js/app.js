@@ -1845,7 +1845,7 @@ function criarElementoMensagem(msg) {
     conteudoHtml = `<div class="conteudo apagada">Mensagem apagada</div>`;
   } else if (msg.type === 'audio') {
     conteudoHtml = msg.mediaUrl
-      ? `<div class="conteudo">${montarPlayerAudio(msg)}</div>`
+      ? `<div class="conteudo conteudo-midia">${montarPlayerAudio(msg)}</div>`
       : `<div class="conteudo apagada">Áudio expirado (12h)</div>`;
   } else if (msg.type === 'video') {
     conteudoHtml = msg.mediaUrl
@@ -1857,7 +1857,7 @@ function criarElementoMensagem(msg) {
       : `<div class="conteudo apagada">Imagem expirada (12h)</div>`;
   } else if (msg.type === 'file') {
     conteudoHtml = msg.mediaUrl
-      ? `<div class="conteudo"><a class="msg-arquivo" href="${msg.mediaUrl}" target="_blank" rel="noopener">📎 ${escapeHtml(msg.content || 'arquivo')}</a></div>`
+      ? `<div class="conteudo conteudo-midia">${montarCartaoArquivo(msg)}</div>`
       : `<div class="conteudo apagada">Arquivo expirado (12h)</div>`;
   } else {
     conteudoHtml = `<div class="conteudo">${destacarMencoes(msg.content)}</div>`;
@@ -2616,6 +2616,68 @@ async function enviarAnexo(file) {
 // =========================================================
 //  PLAYER DE ÁUDIO
 // =========================================================
+// <<ICONES_ARQUIVO>>
+// ---------- Cartão de arquivo: ícone por tipo + nome ----------
+// Cada grupo: [cor, rótulo mostrado no ícone (vazio = usa a própria extensão), extensões]
+const ICONES_ARQUIVO = {};
+(function () {
+  const grupos = [
+    ['#e5484d', 'PDF',  ['pdf']],
+    ['#3b82f6', 'DOC',  ['doc', 'docx', 'odt', 'rtf']],
+    ['#22a06b', 'XLS',  ['xls', 'xlsx', 'ods']],
+    ['#22a06b', 'CSV',  ['csv']],
+    ['#f97316', 'PPT',  ['ppt', 'pptx', 'odp']],
+    ['#8b8f9c', 'TXT',  ['txt', 'log', 'md']],
+    ['#d9a400', 'ZIP',  ['zip', 'rar', '7z', 'tar', 'gz']],
+    ['#8b5cf6', '',     ['js', 'ts', 'py', 'html', 'css', 'json', 'java', 'c', 'cpp', 'cs', 'php', 'sql', 'xml', 'sh']],
+    ['#ec4899', '',     ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac']],
+    ['#14b8a6', '',     ['mp4', 'webm', 'mov', 'mkv', 'avi']],
+    ['#06b6d4', '',     ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']],
+    ['#64748b', 'APK',  ['apk']],
+    ['#64748b', 'EXE',  ['exe', 'msi']]
+  ];
+  grupos.forEach(([cor, rotulo, exts]) => exts.forEach(e => {
+    ICONES_ARQUIVO[e] = { cor, rotulo: rotulo || e.toUpperCase() };
+  }));
+})();
+// Tipos que o navegador sabe mostrar sozinho: abrem em nova aba. O resto baixa.
+const ARQUIVOS_ABREM_NO_NAVEGADOR = ['pdf', 'txt', 'log', 'md', 'json', 'csv'];
+// <</ICONES_ARQUIVO>>
+
+function extensaoDoArquivo(nome) {
+  const m = /\.([A-Za-z0-9]+)$/.exec(String(nome || '').trim());
+  return m ? m[1].toLowerCase() : '';
+}
+
+function tipoDoArquivo(nome) {
+  const ext = extensaoDoArquivo(nome);
+  const base = ICONES_ARQUIVO[ext] || { cor: '#64748b', rotulo: ext ? ext.toUpperCase().slice(0, 4) : 'ARQ' };
+  return { ext, cor: base.cor, rotulo: base.rotulo, abre: ARQUIVOS_ABREM_NO_NAVEGADOR.includes(ext) };
+}
+
+// Deixa o nome quebrar depois de _ e - e antes do ponto, assim a extensão (.pdf) nunca é cortada ao meio
+function nomeQuebravel(nome) {
+  return escapeHtml(nome).replace(/([_-])/g, '$1<wbr>').replace(/\./g, '<wbr>.');
+}
+
+function montarCartaoArquivo(msg) {
+  const nome = msg.content || 'arquivo';
+  const t = tipoDoArquivo(nome);
+  const tamanhoFonte = t.rotulo.length > 3 ? 9 : 11;
+  const icone = '<svg class="arq-icone" viewBox="0 0 40 48" aria-hidden="true">'
+    + '<path d="M6 2h20l12 12v30a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="' + t.cor + '"/>'
+    + '<path d="M26 2l12 12H28a2 2 0 0 1-2-2z" fill="rgba(255,255,255,.38)"/>'
+    + '<text x="20" y="37" text-anchor="middle" font-size="' + tamanhoFonte + '" font-weight="800" '
+    + 'font-family="Arial, Helvetica, sans-serif" fill="#fff">' + escapeHtml(t.rotulo) + '</text></svg>';
+  const atributos = t.abre
+    ? 'target="_blank" rel="noopener"'
+    : 'download="' + escapeAttr(nome) + '" target="_blank" rel="noopener"';
+  return '<a class="arq-cartao" href="' + escapeAttr(msg.mediaUrl) + '" ' + atributos + ' title="' + escapeAttr(nome) + '">'
+    + icone
+    + '<span class="arq-info"><span class="arq-nome">' + nomeQuebravel(nome) + '</span>'
+    + '<span class="arq-sub">' + escapeHtml(t.rotulo) + ' · ' + (t.abre ? 'Abrir' : 'Baixar') + '</span></span></a>';
+}
+
 const AUDIO_BARRAS = 34;
 
 function ondasDoAudio(seed) {
@@ -2631,6 +2693,7 @@ function ondasDoAudio(seed) {
 }
 
 function montarPlayerAudio(msg) {
+  // .replace(...) tira as quebras de linha e espaços do template, que viravam linhas em branco
   return `
     <div class="audio-player">
       <button class="audio-btn" type="button" aria-label="Tocar áudio">
@@ -2645,7 +2708,7 @@ function montarPlayerAudio(msg) {
         </div>
       </div>
       <audio preload="metadata" src="${escapeAttr(msg.mediaUrl)}"></audio>
-    </div>`;
+    </div>`.replace(/>\s+</g, '><').trim();
 }
 
 function formatarTempoAudio(seg) {

@@ -4348,3 +4348,55 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
   #mensagens .msg:has(.audio-player) { max-width: min(82%, 300px) !important; }
   #mensagens .msg .audio-player { width: min(250px, 64vw) !important; }
 }
+
+/* =========================================================
+   CORREÇÕES: modais, balões de mídia, botão de responder, arquivos
+   (fica no fim do arquivo de propósito, pra vencer o que veio antes)
+   ========================================================= */
+
+/* Modal sempre acima do cabeçalho do chat (120), dropdowns (300) e painel de aparência (1000) */
+.modal-overlay { z-index: 2000; }
+
+/* Balão nunca é espremido pelo contêiner flex da conversa */
+#mensagens .msg { flex-shrink: 0; }
+
+/* Mídia: sem pre-wrap, que transformava espaço/quebra do HTML em linhas em branco */
+.msg .conteudo.conteudo-midia { white-space: normal; }
+
+/* Botão de responder fica FORA do balão, centralizado, sem cobrir o conteúdo */
+#mensagens .msg .btn-responder-rapido {
+  top: 50%;
+  left: auto;
+  right: -34px;
+  transform: translateY(-50%);
+}
+#mensagens .msg.minha .btn-responder-rapido { right: auto; left: -34px; }
+#mensagens .msg.arrastando .btn-responder-rapido,
+.mensagens.selecionando .msg .btn-responder-rapido { opacity: 0; pointer-events: none; }
+
+/* Cartão de arquivo: ícone do tipo + nome */
+.arq-cartao {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 200px;
+  max-width: 280px;
+  padding: 2px 0;
+  color: inherit;
+  text-decoration: none;
+}
+.arq-icone { width: 36px; height: 44px; flex-shrink: 0; filter: drop-shadow(0 2px 4px rgba(0,0,0,.28)); }
+.arq-info { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.arq-nome {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.arq-cartao:hover .arq-nome { text-decoration: underline; }
+.arq-sub { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; opacity: .72; }
