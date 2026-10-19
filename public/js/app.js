@@ -2364,6 +2364,7 @@ function escolherMencao(username) {
   const depois = input.value.slice(mencaoAtiva.fim);
   const inserido = '@' + username + ' ';
   input.value = antes + inserido + depois;
+  atualizarBotoesInput();
   const posicao = (antes + inserido).length;
   input.focus();
   input.setSelectionRange(posicao, posicao);
@@ -2387,7 +2388,15 @@ function enviarTexto() {
   });
 
   input.value = '';
+  atualizarBotoesInput();
   cancelarResposta();
+}
+
+// celular: com texto digitado mostra "enviar", sem texto mostra o microfone (o CSS faz a troca)
+function atualizarBotoesInput() {
+  const input = document.getElementById('input-texto');
+  const area = input && input.closest('.input-area');
+  if (area) area.classList.toggle('digitando', input.value.trim().length > 0);
 }
 
 // ---------- Responder ----------

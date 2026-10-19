@@ -4407,3 +4407,19 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
 /* menu flutuante da lista de conversas e avisos (toast) também acima de tudo, inclusive do modal (2000) */
 #menu-flutuante { z-index: 600; }
 .toast { z-index: 3000; }
+
+/* ===== Barra de mensagem: anexo + (microfone | enviar) ===== */
+.input-area #btn-anexo,.input-area #btn-enviar,.input-area #btn-audio,.input-area #btn-video{width:48px;min-width:48px;height:48px;min-height:48px;flex:0 0 48px;display:grid;place-items:center;padding:0;border:1px solid var(--border);border-radius:15px;background:var(--glass);color:var(--text-muted);box-shadow:none}
+.input-area #btn-enviar{background:var(--accent);border-color:transparent;color:var(--accent-contrast)}
+.input-area #btn-enviar span{display:none}
+.input-area #btn-anexo:hover,.input-area #btn-audio:hover,.input-area #btn-video:hover{border-color:var(--accent);color:var(--text)}
+.input-area #btn-enviar:hover{background:#ffc478;color:#17120b}
+@media(max-width:680px){
+  /* celular: enquanto não digita, só barra + clipe + microfone. Digitou algo, o microfone dá lugar ao enviar. */
+  .input-area #btn-video{display:none}
+  .input-area #btn-enviar{display:none}
+  .input-area.digitando #btn-enviar{display:grid}
+  .input-area.digitando #btn-audio{display:none}
+  .input-area #btn-anexo,.input-area #btn-enviar,.input-area #btn-audio{width:44px;min-width:44px;flex-basis:44px;height:46px;min-height:46px;border-radius:14px}
+}
+.input-area #input-anexo{display:none!important}
