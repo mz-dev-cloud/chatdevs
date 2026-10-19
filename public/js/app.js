@@ -1883,7 +1883,7 @@ function criarElementoMensagem(msg) {
     if (typeof msg.replyTo === 'object') {
       const rt = msg.replyTo;
       replyHtml = `<div class="quote-box" onclick="irParaMensagem('${rt.id}')">
-        <div class="quote-nome">${escapeHtml(rt.userName)}</div>
+        <div class="quote-nome">${escapeHtml(nomeDoCitado(rt))}</div>
         <div class="quote-snippet">${escapeHtml(rt.snippet)}</div>
       </div>`;
     } else {
@@ -2237,6 +2237,18 @@ async function cancelarSolicitacaoConvite(code, btn) {
 }
 
 // ---------- Prévia de mensagem (usada na citação de resposta) ----------
+// nome mostrado na caixinha de citação, sempre do ponto de vista de quem está VENDO:
+// "Você" se a mensagem citada é minha, senão o nick de quem escreveu.
+function nomeDoCitado(rt) {
+  if (rt.userId === usuarioAtual.id) return 'Você';
+  if (rt.realName) return rt.realName;
+  const original = mensagensCacheAtual.get(rt.id);
+  if (original && original.senderUsername) return original.senderUsername;
+  // respostas antigas (sem realName): se o nome gravado não é "Você", serve; senão, no PV é o outro
+  if (rt.userName && rt.userName !== 'Você') return rt.userName;
+  if (chatAtualOutro && chatAtualOutro.username) return chatAtualOutro.username;
+  return 'Usuário';
+}
 function nomeDoRemetente(msg) {
   if (msg.senderId === usuarioAtual.id) return 'Você';
   return msg.senderUsername || 'Usuário removido';
@@ -2370,6 +2382,9 @@ function responderMensagem(id) {
     id: msg.id,
     userId: msg.senderId,
     userName: nomeDoRemetente(msg),
+    // nome "de verdade" de quem escreveu — o userName acima vira "Você" pra quem respondeu,
+    // e esse texto fica gravado na mensagem, então o outro lado via "Você" errado.
+    realName: msg.senderId === usuarioAtual.id ? usuarioAtual.username : (msg.senderUsername || 'Usuário removido'),
     snippet: previaDaMensagem(msg)
   };
   document.getElementById('reply-preview-nome').textContent = respondendoA.userName;
