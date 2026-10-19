@@ -295,21 +295,23 @@ async function enviarEmailVerificacao(email, code, token, req) {
   if (!response.ok) { const detail = await response.text(); console.error('[email] Resend:', detail); throw new Error('Não foi possível enviar o email. Confira o domínio e as credenciais de email.'); }
 }
 function finalizarCadastroPendente(db, pending) {
-  // Google accounts created before the verification flow are verified in-place, not duplicated.
+  // Contas existentes são atualizadas no lugar; nenhuma conta é duplicada.
   let user = pending.existingUserId ? db.users.find(u => u.id === pending.existingUserId) : null;
   if (user) {
     user.emailVerified = true;
-    user.googleEmailCodeVerified = true;
+    user.emailCodeVerified = true;
+    if (pending.authProvider === 'google') user.googleEmailCodeVerified = true;
     user.contactNumber = user.contactNumber || pending.contactNumber || novoNumeroContato(db);
     user.photoUrl = user.photoUrl || pending.photoUrl || null;
-    user.authProvider = user.authProvider || pending.authProvider || 'google';
+    user.authProvider = user.authProvider || pending.authProvider || 'email';
   } else {
     user = {
       id: uuidv4(), username: pending.username, email: pending.email,
       passwordHash: pending.passwordHash || null,
       contactNumber: pending.contactNumber || novoNumeroContato(db),
       createdIp: pending.createdIp || '', createdAt: Date.now(),
-      emailVerified: true, authProvider: pending.authProvider || 'email',
+      emailVerified: true, emailCodeVerified: true,
+      authProvider: pending.authProvider || 'email',
       photoUrl: pending.photoUrl || null,
       ...(pending.authProvider === 'google' ? { googleEmailCodeVerified: true } : {})
     };
@@ -343,13 +345,13 @@ app.post('/api/verify-email-code', (req, res) => {
   const email = String(req.body.email || '').trim().toLowerCase(); const code = String(req.body.code || '').trim(); const db = loadDB(); const pending = db.pendingVerifications[email];
   if (!pending || pending.expiresAt < Date.now()) { if (pending) { delete db.pendingVerifications[email]; saveDB(db); } return res.status(400).json({ error: 'Código expirado. Faça o cadastro novamente.' }); }
   if (!/^\d{6}$/.test(code) || codigoHash(email, code) !== pending.codeHash) return res.status(400).json({ error: 'Código incorreto. Confira os seis dígitos e tente novamente.' });
-  const ip = pending.createdIp; db.ipCounts[ip] = (db.ipCounts[ip] || 0) + 1; const user = finalizarCadastroPendente(db, pending); res.json({ user: publicUser(user) });
+  if (!pending.existingUserId) { const ip = pending.createdIp; db.ipCounts[ip] = (db.ipCounts[ip] || 0) + 1; } const user = finalizarCadastroPendente(db, pending); res.json({ user: publicUser(user) });
 });
 app.get('/api/verify-email', (req, res) => {
   const token = String(req.query.token || ''); const tokenHash = crypto.createHash('sha256').update(token).digest('hex'); const db = loadDB();
   const entry = Object.entries(db.pendingVerifications || {}).find(([, p]) => p.tokenHash === tokenHash);
   if (!entry || entry[1].expiresAt < Date.now()) return res.status(400).send('<meta name="viewport" content="width=device-width"><body style="font-family:Arial;background:#101218;color:white;padding:40px;text-align:center"><h1>Link expirado</h1><p>Volte ao ChatDevs e faça o cadastro novamente.</p></body>');
-  const [email, pending] = entry; db.ipCounts[pending.createdIp] = (db.ipCounts[pending.createdIp] || 0) + 1; finalizarCadastroPendente(db, pending);
+  const [email, pending] = entry; if (!pending.existingUserId) db.ipCounts[pending.createdIp] = (db.ipCounts[pending.createdIp] || 0) + 1; finalizarCadastroPendente(db, pending);
   res.send(`<!doctype html><meta name="viewport" content="width=device-width"><title>Email verificado</title><body style="font-family:Arial;background:#101218;color:#f5f6f8;display:grid;place-items:center;min-height:90vh;text-align:center"><div style="padding:32px;border:1px solid #343b47;border-radius:24px;max-width:420px"><div style="font-size:48px;color:#c7f36b">✓</div><h1>Email verificado!</h1><p style="color:#b7bdc9">Sua conta ChatDevs está ativa. Volte ao aplicativo e entre com seu email e senha.</p><a style="display:inline-block;background:#c7f36b;color:#111;text-decoration:none;padding:14px 22px;border-radius:12px;font-weight:bold" href="/">Voltar ao ChatDevs</a></div></body>`);
 });
 app.post('/api/google-login', async (req, res) => {
@@ -367,16 +369,8 @@ app.post('/api/google-login', async (req, res) => {
     let user = db.users.find(u => u.email.toLowerCase() === email);
     if (user && user.bloqueadoAdmin) return res.status(403).json({ error: 'Sua conta foi suspensa. Entre em contato com o suporte.' });
 
-    // Existing email/password accounts were already verified by their own email flow.
-    if (user && user.authProvider !== 'google') {
-      user.emailVerified = true;
-      user.contactNumber = user.contactNumber || novoNumeroContato(db);
-      saveDB(db);
-      return res.json({ user: publicUser(user) });
-    }
-
-    // New Google registrations and legacy Google accounts must confirm possession of the mailbox once.
-    if (user && user.googleEmailCodeVerified === true) {
+    // Todas as contas, inclusive as antigas, precisam concluir a verificação por código uma vez.
+    if (user && user.emailCodeVerified === true) {
       user.contactNumber = user.contactNumber || novoNumeroContato(db);
       user.emailVerified = true;
       user.photoUrl = user.photoUrl || payload.picture || null;
@@ -425,6 +419,29 @@ app.post('/api/login', async (req, res) => {
   const ok = await bcrypt.compare(String(password || ''), user.passwordHash);
   if (!ok) return res.status(401).json({ error: 'Senha incorreta' });
   if (user.bloqueadoAdmin) return res.status(403).json({ error: 'Sua conta foi suspensa. Entre em contato com o suporte.' });
+  if (user.emailCodeVerified !== true) {
+    try {
+      if (!db.pendingVerifications) db.pendingVerifications = {};
+      const email = String(user.email).toLowerCase();
+      const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+      const token = crypto.randomBytes(32).toString('hex');
+      const pending = {
+        username: user.username, email, passwordHash: user.passwordHash || null,
+        createdIp: user.createdIp || getClientIp(req), contactNumber: user.contactNumber || novoNumeroContato(db),
+        photoUrl: user.photoUrl || null, existingUserId: user.id,
+        codeHash: codigoHash(email, code),
+        tokenHash: crypto.createHash('sha256').update(token).digest('hex'),
+        expiresAt: Date.now() + 15 * 60 * 1000, authProvider: user.authProvider || 'email'
+      };
+      db.pendingVerifications[email] = pending;
+      saveDB(db);
+      await enviarEmailVerificacao(email, code, token, req);
+      return res.json({ verificationRequired: true, email });
+    } catch (e) {
+      console.error('[login-email-verification]', e.message);
+      return res.status(503).json({ error: 'Precisamos verificar seu email antes de entrar, mas não foi possível enviar o código. Confira o Resend e tente novamente.' });
+    }
+  }
   if (!user.emailVerified) return res.status(403).json({ error: 'Seu email ainda não foi verificado.' });
   res.json({ user: publicUser(user) });
 });
@@ -457,10 +474,11 @@ app.post('/api/users/:userId/profile', (req, res) => {
   const user = db.users.find(u => u.id === userId);
   if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
   const bio = String(req.body.bio || '').trim().slice(0, 240);
+  const phoneProvided = Object.prototype.hasOwnProperty.call(req.body, 'phone');
   const phone = String(req.body.phone || '').trim().slice(0, 30);
   const ringColor = /^#[0-9a-fA-F]{6}$/.test(String(req.body.ringColor || '')) ? req.body.ringColor : '#ffb454';
   user.bio = bio;
-  user.phone = phone;
+  if (phoneProvided) user.phone = phone;
   user.ringColor = ringColor;
   user.socials = normalizarSocials(req.body.socials);
   saveDB(db);
