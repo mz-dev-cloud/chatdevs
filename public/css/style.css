@@ -4479,7 +4479,6 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
 #mensagens .msg.menu-mensagem-aberto .acoes { display:flex !important; opacity:1; pointer-events:auto; animation:msgActionsIn .16s ease both; }
 #mensagens .msg { -webkit-touch-callout:none; }
 #mensagens .msg.menu-mensagem-aberto { z-index:12; }
-#mensagens .msg.menu-mensagem-aberto .conteudo { outline:1px solid color-mix(in srgb,var(--accent) 28%,transparent); outline-offset:3px; }
 #mensagens .msg .btn-responder-rapido { display:none !important; }
 @keyframes msgActionsIn { from { opacity:0; transform:translateY(5px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } }
 
@@ -4531,3 +4530,24 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
 .item-chat-meta time { display:flex; flex-direction:column; align-items:flex-end; gap:1px; }
 .item-chat-time-hour { color:#c4cad4; font-size:10px; line-height:1.2; }
 .item-chat-time-date { color:#777f8e; font-size:9px; line-height:1.2; }
+
+
+/* ---------- Menu de ações da mensagem no PC: setinha ▾ no hover ---------- */
+#mensagens .msg .btn-menu-msg {
+  position:absolute; top:4px; right:6px; z-index:3;
+  width:22px; height:22px; padding:0; border:0; border-radius:50%;
+  display:none; align-items:center; justify-content:center;
+  background:color-mix(in srgb,var(--bg-panel) 85%,transparent);
+  color:var(--text-muted); font-size:14px; line-height:1; cursor:pointer;
+}
+#mensagens .msg .btn-menu-msg:hover { color:var(--accent-text,var(--accent)); }
+#mensagens .msg.minha .btn-menu-msg { right:auto; left:6px; }
+@media (hover:hover) and (pointer:fine) {
+  #mensagens .msg:hover .btn-menu-msg,
+  #mensagens .msg.menu-mensagem-aberto .btn-menu-msg { display:flex; }
+}
+#mensagens .msg { -webkit-user-select:text; user-select:text; }
+
+/* Menu aberto: sem contorno retangular, só um brilho suave no balão */
+#mensagens .msg.menu-mensagem-aberto { box-shadow:0 0 0 1px color-mix(in srgb,var(--accent) 35%,transparent), 0 6px 18px rgba(0,0,0,.25); }
+#mensagens .msg.menu-mensagem-aberto .conteudo { outline:none !important; }
