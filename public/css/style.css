@@ -4348,3 +4348,86 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
   #mensagens .msg:has(.audio-player) { max-width: min(82%, 300px) !important; }
   #mensagens .msg .audio-player { width: min(250px, 64vw) !important; }
 }
+
+/* =========================================================
+   CORREÇÕES: modais, balões de mídia, botão de responder, arquivos
+   (fica no fim do arquivo de propósito, pra vencer o que veio antes)
+   ========================================================= */
+
+/* Modal sempre acima do cabeçalho do chat (120), dropdowns (300) e painel de aparência (1000) */
+.modal-overlay { z-index: 2000; }
+
+/* Balão nunca é espremido pelo contêiner flex da conversa */
+#mensagens .msg { flex-shrink: 0; }
+
+/* Mídia: sem pre-wrap, que transformava espaço/quebra do HTML em linhas em branco */
+.msg .conteudo.conteudo-midia { white-space: normal; }
+
+/* Botão de responder fica FORA do balão, centralizado, sem cobrir o conteúdo */
+#mensagens .msg .btn-responder-rapido {
+  top: 50%;
+  left: auto;
+  right: -34px;
+  transform: translateY(-50%);
+}
+#mensagens .msg.minha .btn-responder-rapido { right: auto; left: -34px; }
+#mensagens .msg.arrastando .btn-responder-rapido,
+.mensagens.selecionando .msg .btn-responder-rapido { opacity: 0; pointer-events: none; }
+
+/* Cartão de arquivo: ícone do tipo + nome */
+.arq-cartao {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 200px;
+  max-width: 280px;
+  padding: 2px 0;
+  color: inherit;
+  text-decoration: none;
+}
+.arq-icone { width: 36px; height: 44px; flex-shrink: 0; filter: drop-shadow(0 2px 4px rgba(0,0,0,.28)); }
+.arq-info { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.arq-nome {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.arq-cartao:hover .arq-nome { text-decoration: underline; }
+.arq-sub { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; opacity: .72; }
+
+/* Menus do topo (⋮ da conta e troca de conta) ficam acima do cabeçalho do chat (z-index 120).
+   Sem isso, o .topbar não cria camada própria e os menus (z-index 80) passavam por baixo. */
+.topbar { position: relative; z-index: 500; }
+/* menu flutuante da lista de conversas e avisos (toast) também acima de tudo, inclusive do modal (2000) */
+#menu-flutuante { z-index: 600; }
+.toast { z-index: 3000; }
+
+/* ===== Barra de mensagem: anexo + (microfone | enviar) ===== */
+.input-area #btn-anexo,.input-area #btn-enviar,.input-area #btn-audio,.input-area #btn-video{width:48px;min-width:48px;height:48px;min-height:48px;flex:0 0 48px;display:grid;place-items:center;padding:0;border:1px solid var(--border);border-radius:15px;background:var(--glass);color:var(--text-muted);box-shadow:none}
+.input-area #btn-enviar{background:var(--accent);border-color:transparent;color:var(--accent-contrast)}
+.input-area #btn-enviar span{display:none}
+.input-area #btn-anexo:hover,.input-area #btn-audio:hover,.input-area #btn-video:hover{border-color:var(--accent);color:var(--text)}
+.input-area #btn-enviar:hover{background:#ffc478;color:#17120b}
+@media(max-width:680px){
+  /* celular: enquanto não digita, só barra + clipe + microfone. Digitou algo, o microfone dá lugar ao enviar. */
+  .input-area #btn-video{display:none}
+  .input-area #btn-enviar{display:none}
+  .input-area.digitando #btn-enviar{display:grid}
+  .input-area.digitando #btn-audio{display:none}
+  .input-area #btn-anexo,.input-area #btn-enviar,.input-area #btn-audio{width:44px;min-width:44px;flex-basis:44px;height:46px;min-height:46px;border-radius:14px}
+}
+.input-area #input-anexo{display:none!important}
+
+/* Autenticação premium: verificação e acesso Google */
+.auth-google-btn{width:100%;min-height:50px;display:flex;align-items:center;justify-content:center;gap:12px;margin-top:14px;border:1px solid rgba(255,255,255,.14);border-radius:13px;background:rgba(255,255,255,.045);color:var(--auth-text,#f5f6f8);font-family:inherit;font-size:14px;font-weight:600;cursor:pointer;transition:transform .22s ease,border-color .22s ease,background .22s ease}
+.auth-google-btn:hover{transform:translateY(-2px);border-color:rgba(199,243,107,.6);background:rgba(199,243,107,.07)}
+.google-g{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#fff;color:#4285f4;font:800 16px Arial,sans-serif;box-shadow:0 2px 10px #0002}
+.auth-layout-verify{width:min(500px,100%);display:flex;justify-content:center}.auth-verify-card{width:100%;animation:verifyCardIn .55s cubic-bezier(.2,.8,.2,1) both}.verify-orbit{width:76px;height:76px;border-radius:24px;display:grid;place-items:center;margin:4px auto 18px;background:linear-gradient(145deg,rgba(199,243,107,.2),rgba(114,228,189,.06));border:1px solid rgba(199,243,107,.35);color:var(--auth-lime,#c7f36b);font-size:38px;box-shadow:0 0 44px rgba(199,243,107,.1);animation:verifyFloat 3.4s ease-in-out infinite}.verify-code-input{width:100%;text-align:center;letter-spacing:.55em;font-size:28px!important;font-weight:800!important;padding-left:.55em!important;font-variant-numeric:tabular-nums}.verify-help{font-size:12px;line-height:1.7;color:var(--text-muted,#9da5b5);text-align:center;margin:20px 0 6px}.perfil-contato-virtual{display:flex!important;align-items:center;gap:10px}.perfil-numero-copiar{margin-left:auto;border:0;background:transparent;color:inherit;font-size:17px;cursor:pointer;padding:4px 8px;border-radius:8px}.perfil-numero-copiar:hover{background:rgba(255,255,255,.08)}
+@keyframes verifyCardIn{from{opacity:0;transform:translateY(18px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}@keyframes verifyFloat{0%,100%{transform:translateY(0) rotate(-2deg)}50%{transform:translateY(-7px) rotate(2deg)}}
+@media(prefers-reduced-motion:reduce){.verify-orbit,.auth-verify-card{animation:none!important}.auth-google-btn{transition:none!important}}
