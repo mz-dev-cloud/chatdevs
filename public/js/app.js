@@ -1065,6 +1065,8 @@ async function atualizarPermissoesGrupo(chatId) {
 
 // ---------- Ícone (👤n) de pedidos de entrada pendentes, do lado do menu de 3 pontinhos ----------
 async function atualizarBadgePedidos(chatId) {
+  // só admin/dono pode ver os pedidos; pra quem não é, nem pergunta (evita o erro 403 no console)
+  if (chatId === chatAtualId && !chatAtualSouAdmin) { esconderBadgePedidos(); return; }
   const resp = await fetch(`/api/chats/${chatId}/invite?userId=${usuarioAtual.id}`);
   const btn = document.getElementById('btn-pedidos-grupo');
   if (!resp.ok) { esconderBadgePedidos(); return; } // não é admin, ou grupo sem link ainda

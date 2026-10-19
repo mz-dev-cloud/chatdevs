@@ -248,15 +248,15 @@
 
           <div class="input-area">
             <div id="mencao-popup" class="mencao-popup oculto"></div>
-            <input id="input-texto" placeholder="Digite uma mensagem" onkeydown="if(event.key==='Enter') enviarTexto()">
-            <input type="file" id="input-anexo" style="display:none" accept="image/*,.pdf,.doc,.docx,audio/*,video/*" onchange="enviarAnexo(this.files[0])">
+            <input id="input-texto" placeholder="Digite uma mensagem" oninput="atualizarBotoesInput()" onkeydown="if(event.key==='Enter') enviarTexto()">
+            <input type="file" id="input-anexo" style="display:none" onchange="enviarAnexo(this.files[0])">
             <button id="btn-anexo" onclick="document.getElementById('input-anexo').click()" title="Anexar foto ou arquivo" aria-label="Anexar arquivo">
-              <i class="mdi mdi-image-outline" aria-hidden="true"></i>
+              <i class="mdi mdi-paperclip" aria-hidden="true"></i>
             </button>
             <button id="btn-audio" onclick="alternarGravacao('audio')" title="Gravar áudio" aria-label="Gravar áudio">
               <i class="mdi mdi-microphone-outline" aria-hidden="true"></i>
             </button>
-            <button onclick="enviarTexto()" title="Enviar" aria-label="Enviar mensagem">
+            <button id="btn-enviar" onclick="enviarTexto()" title="Enviar" aria-label="Enviar mensagem">
               <i class="mdi mdi-send" aria-hidden="true"></i>
             </button>
           </div>
