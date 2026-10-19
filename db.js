@@ -6,14 +6,14 @@ const Chat    = mongoose.model('Chat',    new mongoose.Schema({}, opts));
 const Message = mongoose.model('Message', new mongoose.Schema({}, opts));
 const Meta    = mongoose.model('Meta',    new mongoose.Schema({}, opts));
 
-const META_KEYS = { ipCounts: {}, blocks: [], reads: {}, pendingInvites: [], contacts: [] };
+const META_KEYS = { ipCounts: {}, blocks: [], reads: {}, pendingInvites: [], contacts: [], pendingVerifications: {} };
 const ultimo = { User: new Map(), Chat: new Map(), Message: new Map(), Meta: new Map() };
 let cache = null;
 
 const limpa = d => { delete d._id; delete d.__v; return d; };
 
 async function init() {
-  const mongoURI = "mongodb+srv://uzucodx_db_user:2HQvNzrVTx2tr8Lv@cluster0.b0cejtc.mongodb.net/chatdevs?retryWrites=true&w=majority&compressors=zlib";
+  const mongoURI = process.env.MONGODB_URI;
   if (!mongoURI) {
     throw new Error('Variável MONGODB_URI ausente. No Railway, adicione MONGODB_URI nas Variables do serviço com a URI do MongoDB Atlas.');
   }
