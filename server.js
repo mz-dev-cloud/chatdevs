@@ -1389,11 +1389,76 @@ app.get('/api/blocks', (req, res) => {
   res.json({ bloqueados });
 });
 
+// ---------- Reações, mensagens fixadas e conversas arquivadas ----------
+const EMOJIS_REACAO_PERMITIDOS = new Set(['👍','❤️','😂','😮','😢','🙏','🔥','👏']);
+
+app.post('/api/chats/:chatId/archive', (req, res) => {
+  const { chatId } = req.params;
+  const { userId, archived } = req.body || {};
+  if (!userId) return res.status(400).json({ error: 'Informe o usuário.' });
+  const db = loadDB();
+  const chat = db.chats.find(c => c.id === chatId);
+  if (!chat || (!chat.members.includes(userId) && !(chat.removedMembers || []).some(r => r.userId === userId))) {
+    return res.status(404).json({ error: 'Conversa não encontrada.' });
+  }
+  if (!Array.isArray(chat.archivedBy)) chat.archivedBy = [];
+  if (archived) {
+    if (!chat.archivedBy.includes(userId)) chat.archivedBy.push(userId);
+  } else {
+    chat.archivedBy = chat.archivedBy.filter(id => id !== userId);
+  }
+  saveDB(db);
+  res.json({ ok: true, archived: !!archived });
+});
+
+app.post('/api/chats/:chatId/pin', (req, res) => {
+  const { chatId } = req.params;
+  const { userId, messageId } = req.body || {};
+  if (!userId || !messageId) return res.status(400).json({ error: 'Dados incompletos.' });
+  const db = loadDB();
+  const chat = db.chats.find(c => c.id === chatId);
+  if (!chat || !chat.members.includes(userId)) return res.status(404).json({ error: 'Conversa não encontrada.' });
+  const msg = db.messages.find(m => m.id === messageId && m.chatId === chatId && !m.deleted && m.type !== 'system');
+  if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada.' });
+  const pinned = chat.pinnedMessageId !== messageId;
+  chat.pinnedMessageId = pinned ? messageId : null;
+  saveDB(db);
+  io.to('chat:' + chatId).emit('message_pin_updated', { chatId, messageId, pinned });
+  res.json({ ok: true, pinned, messageId });
+});
+
+app.post('/api/messages/:messageId/reaction', (req, res) => {
+  const { messageId } = req.params;
+  const { userId, emoji } = req.body || {};
+  if (!userId || !EMOJIS_REACAO_PERMITIDOS.has(emoji)) return res.status(400).json({ error: 'Reação inválida.' });
+  const db = loadDB();
+  const msg = db.messages.find(m => m.id === messageId && !m.deleted && m.type !== 'system');
+  if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada.' });
+  const chat = db.chats.find(c => c.id === msg.chatId);
+  if (!chat || !chat.members.includes(userId)) return res.status(403).json({ error: 'Sem acesso a essa conversa.' });
+  if (!Array.isArray(msg.reactions)) msg.reactions = [];
+  const existing = msg.reactions.find(r => r.userId === userId);
+  if (existing && existing.emoji === emoji) {
+    msg.reactions = msg.reactions.filter(r => r.userId !== userId);
+  } else if (existing) {
+    existing.emoji = emoji;
+    existing.updatedAt = Date.now();
+  } else {
+    msg.reactions.push({ userId, emoji, updatedAt: Date.now() });
+  }
+  saveDB(db);
+  const payload = { chatId: msg.chatId, messageId, reactions: msg.reactions };
+  io.to('chat:' + msg.chatId).emit('message_reactions_updated', payload);
+  res.json({ ok: true, reactions: msg.reactions });
+});
+
 app.get('/api/chats', (req, res) => {
-  const { userId } = req.query;
+  const { userId, view } = req.query;
   const db = loadDB();
 
   const chats = db.chats.filter(c => {
+    const isArchived = Array.isArray(c.archivedBy) && c.archivedBy.includes(userId);
+    if ((view === 'archived') !== isArchived) return false;
     if (c.type === 'private' && c.hiddenAt && c.hiddenAt[userId]) {
       // apaguei essa conversa: só volta pra lista se chegou mensagem depois disso
       return db.messages.some(m => m.chatId === c.id && m.createdAt > c.hiddenAt[userId]);
@@ -1458,6 +1523,8 @@ app.get('/api/chats', (req, res) => {
       otherEmail,
       ehAutoConversa,
       removidoDoGrupo,
+      archived: Array.isArray(c.archivedBy) && c.archivedBy.includes(userId),
+      pinnedMessageId: c.pinnedMessageId || null,
       lastMessage: ultima ? (ultima.deleted ? 'Mensagem apagada' : ultima.content) : null,
       unreadCount
     };
@@ -1508,12 +1575,13 @@ app.get('/api/chats/:chatId/messages', (req, res) => {
     })
     .map(m => personalizarMensagem(m, userId, db))
     .map(m => {
-      if (!m.senderId) return m;
-      const remetente = db.users.find(u => u.id === m.senderId);
+      const remetente = m.senderId ? db.users.find(u => u.id === m.senderId) : null;
       return Object.assign({}, m, {
-        senderUsername: remetente ? remetente.username : 'Usuário removido',
+        reactions: Array.isArray(m.reactions) ? m.reactions : [],
+        pinned: chat.pinnedMessageId === m.id,
+        senderUsername: remetente ? remetente.username : (m.senderId ? 'Usuário removido' : m.senderUsername),
         senderPhotoUrl: remetente ? fotoParaViewer(db, remetente, userId) : null,
-        senderSaiuDoGrupo: chat.type === 'group' && !chat.members.includes(m.senderId)
+        senderSaiuDoGrupo: !!(m.senderId && chat.type === 'group' && !chat.members.includes(m.senderId))
       });
     });
   res.json({ messages: mensagens });
@@ -1566,7 +1634,8 @@ io.on('connection', socket => {
       replyTo: replyTo || null,
       createdAt: Date.now(),
       editedAt: null,
-      deleted: false
+      deleted: false,
+      reactions: []
     };
     db.messages.push(message);
     saveDB(db);
