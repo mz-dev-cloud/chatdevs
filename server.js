@@ -295,8 +295,29 @@ async function enviarEmailVerificacao(email, code, token, req) {
   if (!response.ok) { const detail = await response.text(); console.error('[email] Resend:', detail); throw new Error('Não foi possível enviar o email. Confira o domínio e as credenciais de email.'); }
 }
 function finalizarCadastroPendente(db, pending) {
-  const user = { id: uuidv4(), username: pending.username, email: pending.email, passwordHash: pending.passwordHash || null, contactNumber: pending.contactNumber || novoNumeroContato(db), createdIp: pending.createdIp || '', createdAt: Date.now(), emailVerified: true, authProvider: pending.authProvider || 'email' };
-  db.users.push(user); delete db.pendingVerifications[pending.email.toLowerCase()]; saveDB(db); return user;
+  // Google accounts created before the verification flow are verified in-place, not duplicated.
+  let user = pending.existingUserId ? db.users.find(u => u.id === pending.existingUserId) : null;
+  if (user) {
+    user.emailVerified = true;
+    user.googleEmailCodeVerified = true;
+    user.contactNumber = user.contactNumber || pending.contactNumber || novoNumeroContato(db);
+    user.photoUrl = user.photoUrl || pending.photoUrl || null;
+    user.authProvider = user.authProvider || pending.authProvider || 'google';
+  } else {
+    user = {
+      id: uuidv4(), username: pending.username, email: pending.email,
+      passwordHash: pending.passwordHash || null,
+      contactNumber: pending.contactNumber || novoNumeroContato(db),
+      createdIp: pending.createdIp || '', createdAt: Date.now(),
+      emailVerified: true, authProvider: pending.authProvider || 'email',
+      photoUrl: pending.photoUrl || null,
+      ...(pending.authProvider === 'google' ? { googleEmailCodeVerified: true } : {})
+    };
+    db.users.push(user);
+  }
+  delete db.pendingVerifications[pending.email.toLowerCase()];
+  saveDB(db);
+  return user;
 }
 app.get('/api/auth-config', (req, res) => res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID || '' }));
 app.post('/api/register', async (req, res) => {
@@ -334,19 +355,68 @@ app.get('/api/verify-email', (req, res) => {
 app.post('/api/google-login', async (req, res) => {
   try {
     if (!process.env.GOOGLE_CLIENT_ID) return res.status(503).json({ error: 'Login Google ainda não foi configurado pelo administrador.' });
-    const credential = String(req.body.credential || ''); if (!credential) return res.status(400).json({ error: 'Credencial Google ausente.' });
-    const verify = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`); const payload = await verify.json();
+    const credential = String(req.body.credential || '');
+    if (!credential) return res.status(400).json({ error: 'Credencial Google ausente.' });
+    const verify = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+    const payload = await verify.json();
     if (!verify.ok || payload.aud !== process.env.GOOGLE_CLIENT_ID || payload.email_verified !== 'true' || !payload.email) return res.status(401).json({ error: 'Não foi possível validar sua conta Google.' });
-    const db = loadDB(); const email = String(payload.email).toLowerCase(); let user = db.users.find(u => u.email.toLowerCase() === email);
+
+    const db = loadDB();
+    if (!db.pendingVerifications) db.pendingVerifications = {};
+    const email = String(payload.email).toLowerCase();
+    let user = db.users.find(u => u.email.toLowerCase() === email);
     if (user && user.bloqueadoAdmin) return res.status(403).json({ error: 'Sua conta foi suspensa. Entre em contato com o suporte.' });
+
+    // Existing email/password accounts were already verified by their own email flow.
+    if (user && user.authProvider !== 'google') {
+      user.emailVerified = true;
+      user.contactNumber = user.contactNumber || novoNumeroContato(db);
+      saveDB(db);
+      return res.json({ user: publicUser(user) });
+    }
+
+    // New Google registrations and legacy Google accounts must confirm possession of the mailbox once.
+    if (user && user.googleEmailCodeVerified === true) {
+      user.contactNumber = user.contactNumber || novoNumeroContato(db);
+      user.emailVerified = true;
+      user.photoUrl = user.photoUrl || payload.picture || null;
+      saveDB(db);
+      return res.json({ user: publicUser(user) });
+    }
+
+    const ip = getClientIp(req);
+    const usernameFromGoogle = String(payload.name || email.split('@')[0]).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 20) || 'usuario';
+    let username = user ? user.username : usernameFromGoogle;
     if (!user) {
-      let username = String(payload.name || email.split('@')[0]).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 20) || 'usuario';
-      const base = username; let i = 1; while (db.users.some(u => u.username.toLowerCase() === username.toLowerCase())) username = `${base.slice(0, 18)}${i++}`;
-      user = { id: uuidv4(), username, email, passwordHash: null, contactNumber: novoNumeroContato(db), createdAt: Date.now(), emailVerified: true, authProvider: 'google', photoUrl: payload.picture || null };
-      db.users.push(user); saveDB(db);
-    } else { user.emailVerified = true; user.authProvider = user.authProvider || 'google'; saveDB(db); }
-    res.json({ user: publicUser(user) });
-  } catch (e) { console.error('[google-login]', e); res.status(500).json({ error: 'Falha ao entrar com Google. Tente novamente.' }); }
+      const base = username; let i = 1;
+      while (db.users.some(u => u.username.toLowerCase() === username.toLowerCase()) || Object.values(db.pendingVerifications).some(p => (p.username || '').toLowerCase() === username.toLowerCase() && p.email !== email)) username = `${base.slice(0, 18)}${i++}`;
+    }
+    const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+    const token = crypto.randomBytes(32).toString('hex');
+    const pending = {
+      username, email, passwordHash: user ? user.passwordHash || null : null,
+      createdIp: user ? (user.createdIp || ip) : ip,
+      contactNumber: user?.contactNumber || novoNumeroContato(db),
+      photoUrl: user?.photoUrl || payload.picture || null,
+      existingUserId: user?.id || null,
+      codeHash: codigoHash(email, code),
+      tokenHash: crypto.createHash('sha256').update(token).digest('hex'),
+      expiresAt: Date.now() + 15 * 60 * 1000, authProvider: 'google'
+    };
+    db.pendingVerifications[email] = pending;
+    saveDB(db);
+    try {
+      await enviarEmailVerificacao(email, code, token, req);
+    } catch (e) {
+      delete db.pendingVerifications[email]; saveDB(db);
+      console.error('[google-login-email]', e.message);
+      return res.status(503).json({ error: 'O Google foi validado, mas não conseguimos enviar o código. Confira o Resend e tente novamente.' });
+    }
+    res.json({ verificationRequired: true, email });
+  } catch (e) {
+    console.error('[google-login]', e);
+    res.status(500).json({ error: 'Falha ao entrar com Google. Tente novamente.' });
+  }
 });
 app.post('/api/login', async (req, res) => {
   const { emailOrUsername, password } = req.body; const db = loadDB(); const user = findUserByEmailOrUsername(db, String(emailOrUsername || ''));
