@@ -14,9 +14,7 @@ let socket = null;
 let gravador = null;
 let chunksGravacao = [];
 let tipoGravando = null;
-let filtroConversas = 'todas'; // 'todas' | 'grupo' | 'arquivadas'
-let chatFixada = null; // { messageId, snippet } da conversa aberta
-const EMOJIS_REACAO = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+let filtroConversas = 'todas'; // 'todas' | 'grupo'
 let todasAsConversas = []; // cache da última lista carregada
 
 // ---------- Controle de telas ----------
@@ -468,19 +466,6 @@ function entrarNoChat() {
   socket.on('message_edited', msg => {
     if (msg.chatId === chatAtualId) atualizarMensagemNaTela(msg);
     mensagensCacheAtual.set(msg.id, msg);
-    if (chatFixada && chatFixada.messageId === msg.id) { chatFixada.snippet = String(msg.content || '').slice(0, 80); renderBarraFixada(); }
-  });
-  socket.on('message_reacted', ({ id, chatId, reactions }) => {
-    if (chatId !== chatAtualId) return;
-    const cache = mensagensCacheAtual.get(id);
-    if (cache) cache.reactions = reactions;
-    const box = document.querySelector(`.msg[data-id="${id}"] .reacoes`);
-    if (box) box.innerHTML = reacoesHtml(id, reactions);
-  });
-  socket.on('pin_changed', ({ chatId, pinned }) => {
-    if (chatId !== chatAtualId) return;
-    chatFixada = pinned;
-    renderBarraFixada();
   });
   socket.on('message_deleted', ({ id }) => {
     const cache = mensagensCacheAtual.get(id);
@@ -517,7 +502,7 @@ function entrarNoChat() {
     carregarListaChats();
   });
   socket.on('solicitacao_entrada', ({ chatId, chatName, username }) => {
-    // sem popup pro admin: o pedido aparece só na lista de pedidos do grupo (com o contador)
+    mostrarAviso(`${username} quer entrar no grupo "${chatName}"`);
     if (chatId === chatAtualId) atualizarBadgePedidos(chatId);
   });
   socket.on('solicitacao_recusada', ({ chatName }) => {
@@ -616,8 +601,6 @@ function renderizarListaChats() {
   const busca = (document.getElementById('busca-input').value || '').trim().toLowerCase();
 
   const filtradas = todasAsConversas.filter(chat => {
-    if (filtroConversas === 'arquivadas') { if (!chat.arquivada) return false; }
-    else if (chat.arquivada) return false;
     if (filtroConversas === 'grupo' && chat.type !== 'group') return false;
     if (busca && !chat.name.toLowerCase().includes(busca)) return false;
     return true;
@@ -713,16 +696,7 @@ function abrirMenuChatItem(event, chatId) {
     : `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}')"><span>Apagar conversa</span></div>
        ${chat.ehAutoConversa ? '' : `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); bloquearUsuario('${chat.otherUserId}', '${chat.id}')"><span>Bloquear usuário</span></div>`}`;
 
-  const itemArquivar = `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); arquivarConversa('${chat.id}', ${!chat.arquivada})"><span>${chat.arquivada ? 'Desarquivar' : 'Arquivar'}</span></div>`;
-  abrirMenuFlutuante(event.currentTarget, itemArquivar + itens);
-}
-
-async function arquivarConversa(chatId, arquivar) {
-  await fetch(`/api/chats/${chatId}/archive`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId: usuarioAtual.id, archived: arquivar })
-  });
-  carregarListaChats();
+  abrirMenuFlutuante(event.currentTarget, itens);
 }
 
 // ---------- Estatísticas da home ----------
@@ -1070,8 +1044,6 @@ async function abrirChat(chatId, nome, tipo, outroId, outroEmail, removidoDoGrup
   container.innerHTML = '';
   mensagensCacheAtual = new Map();
   data.messages.forEach(renderizarMensagem);
-  chatFixada = data.pinned || null;
-  renderBarraFixada();
   if (!chatAtualRemovido) marcarComoLida(chatId);
 
   if (tipo === 'group' && !chatAtualRemovido) atualizarBadgePedidos(chatId);
@@ -1093,8 +1065,6 @@ async function atualizarPermissoesGrupo(chatId) {
 
 // ---------- Ícone (👤n) de pedidos de entrada pendentes, do lado do menu de 3 pontinhos ----------
 async function atualizarBadgePedidos(chatId) {
-  // só admin/dono pode ver os pedidos; pra quem não é, nem pergunta (evita o erro 403 no console)
-  if (chatId === chatAtualId && !chatAtualSouAdmin) { esconderBadgePedidos(); return; }
   const resp = await fetch(`/api/chats/${chatId}/invite?userId=${usuarioAtual.id}`);
   const btn = document.getElementById('btn-pedidos-grupo');
   if (!resp.ok) { esconderBadgePedidos(); return; } // não é admin, ou grupo sem link ainda
@@ -1319,9 +1289,6 @@ async function renderConfigGrupoModal(chatId) {
     let botoes = '';
     if (data.souDono && !m.isOwner && !m.isAdmin) {
       botoes += `<button class="btn-outline btn-compacto" onclick="promoverNoModal('${chatId}', '${m.id}')">Tornar admin</button>`;
-    }
-    if (data.souDono && !m.isOwner && m.isAdmin) {
-      botoes += `<button class="btn-outline btn-compacto" onclick="rebaixarNoModal('${chatId}', '${m.id}')">Tirar admin</button>`;
     }
     if ((data.souDono || data.souAdmin) && !m.isOwner && m.id !== usuarioAtual.id) {
       botoes += `<button class="btn-outline btn-compacto" onclick="removerDoModal('${chatId}', '${m.id}', '${escapeHtml(m.username)}')">Remover</button>`;
@@ -1772,17 +1739,6 @@ async function promoverNoModal(chatId, targetUserId) {
   renderConfigGrupoModal(chatId);
 }
 
-async function rebaixarNoModal(chatId, targetUserId) {
-  const resp = await fetch(`/api/chats/${chatId}/demote`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId: usuarioAtual.id, targetUserId })
-  });
-  const data = await resp.json();
-  if (!resp.ok) { mostrarAviso(data.error || 'Não foi possível tirar o admin.'); return; }
-  renderConfigGrupoModal(chatId);
-}
-
 async function removerDoModal(chatId, targetUserId, username) {
   const aceitou = await abrirConfirmacao({
     titulo: 'Remover do grupo',
@@ -1805,9 +1761,7 @@ async function apagarConversa(chatId, removido) {
   document.querySelectorAll('.dropdown-menu').forEach(el => el.classList.add('oculto'));
   const mensagem = removido
     ? 'Apagar essa conversa da sua lista? Ela só some pra você.'
-    : ((todasAsConversas.find(c => c.id === chatId) || {}).type === 'group')
-      ? 'Apagar essa conversa? Isso apaga pra todo mundo que participa dela, não só pra você.'
-      : 'Apagar essa conversa? Ela só some pra você, a outra pessoa continua com ela.';
+    : 'Apagar essa conversa? Isso apaga pra todo mundo que participa dela, não só pra você.';
   const aceitou = await abrirConfirmacao({ titulo: 'Apagar conversa', mensagem, textoBotao: 'Apagar' });
   if (!aceitou) return;
 
@@ -1876,7 +1830,6 @@ function voltarHome() {
   chatAtualTipo = null;
   chatAtualOutro = null;
   chatAtualRemovido = false;
-  chatFixada = null;
   esconderBadgePedidos();
   document.getElementById('chat-view').classList.add('oculto');
   document.getElementById('home-view').classList.remove('oculto');
@@ -1889,14 +1842,6 @@ function renderizarMensagem(msg) {
   const container = document.getElementById('mensagens');
   if (container.querySelector(`[data-id="${msg.id}"]`)) return;
   const el = criarElementoMensagem(msg);
-  const ult = container.lastElementChild;
-  if (!ult || ult.dataset.dia !== el.dataset.dia) {
-    const sep = document.createElement('div');
-    sep.className = 'msg-sistema sep-dia';
-    sep.dataset.dia = el.dataset.dia;
-    sep.textContent = rotuloDia(msg.createdAt);
-    container.appendChild(sep);
-  }
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
   if (msg.type !== 'system') mensagensCacheAtual.set(msg.id, msg);
@@ -1912,7 +1857,6 @@ function criarElementoMensagem(msg) {
     const aviso = document.createElement('div');
     aviso.className = 'msg-sistema';
     aviso.dataset.id = msg.id;
-    aviso.dataset.dia = new Date(msg.createdAt).toDateString();
     aviso.textContent = msg.content;
     return aviso;
   }
@@ -1921,7 +1865,6 @@ function criarElementoMensagem(msg) {
   const minha = msg.senderId === usuarioAtual.id;
   div.className = 'msg' + (minha ? ' minha' : '');
   div.dataset.id = msg.id;
-  div.dataset.dia = new Date(msg.createdAt).toDateString();
 
   let remetenteHtml = '';
   if (chatAtualTipo === 'group' && !minha && msg.senderUsername) {
@@ -1940,7 +1883,7 @@ function criarElementoMensagem(msg) {
     if (typeof msg.replyTo === 'object') {
       const rt = msg.replyTo;
       replyHtml = `<div class="quote-box" onclick="irParaMensagem('${rt.id}')">
-        <div class="quote-nome">${escapeHtml(nomeDoCitado(rt))}</div>
+        <div class="quote-nome">${escapeHtml(rt.userName)}</div>
         <div class="quote-snippet">${escapeHtml(rt.snippet)}</div>
       </div>`;
     } else {
@@ -1991,9 +1934,7 @@ function criarElementoMensagem(msg) {
 
   let acoesHtml = '<div class="acoes">';
   acoesHtml += `<span onclick="responderMensagem('${msg.id}')">Responder</span>`;
-  if (!msg.deleted) acoesHtml += `<span onclick="abrirReacoes(event, '${msg.id}')">Reagir</span>`;
   if (!msg.deleted) acoesHtml += `<span onclick="iniciarEncaminhar('${msg.id}')">Encaminhar</span>`;
-  if (!msg.deleted && podeEnviarNoChatAtual()) acoesHtml += `<span onclick="fixarMensagem('${msg.id}')">Fixar</span>`;
   if (minha && !msg.deleted) {
     if (Date.now() - msg.createdAt < 60000 && msg.type === 'text') {
       acoesHtml += `<span onclick="editarMensagem('${msg.id}')">Editar</span>`;
@@ -2003,7 +1944,7 @@ function criarElementoMensagem(msg) {
   acoesHtml += '</div>';
 
     const etiquetaEncaminhada = (msg.encaminhada && !msg.deleted) ? '<div class="msg-encaminhada">↪ Encaminhada</div>' : '';
-  div.innerHTML = `<span class="swipe-icone-responder">↩</span><span class="msg-check">✓</span>${btnResponderRapidoHtml}${remetenteHtml}${etiquetaEncaminhada}${replyHtml}${conteudoHtml}${linkBtnHtml}<div class="reacoes">${msg.deleted ? '' : reacoesHtml(msg.id, msg.reactions)}</div><div class="hora">${hora}${editadoTxt}</div>${acoesHtml}`;
+  div.innerHTML = `<span class="swipe-icone-responder">↩</span><span class="msg-check">✓</span>${btnResponderRapidoHtml}${remetenteHtml}${etiquetaEncaminhada}${replyHtml}${conteudoHtml}${linkBtnHtml}<div class="hora">${hora}${editadoTxt}</div>${acoesHtml}`;
   ligarPlayerAudio(div);
   if (msgsSelecionadas && msgsSelecionadas.has(msg.id)) div.classList.add('msg-selecionada');
   const btnLink = div.querySelector('.btn-acessar-link');
@@ -2016,53 +1957,6 @@ function criarElementoMensagem(msg) {
     }
   }
   return div;
-}
-
-function rotuloDia(ts) {
-  const d = new Date(ts), h = new Date();
-  const ini = x => new Date(x.getFullYear(), x.getMonth(), x.getDate());
-  const dif = Math.round((ini(h) - ini(d)) / 864e5);
-  if (dif === 0) return 'Hoje';
-  if (dif === 1) return 'Ontem';
-  if (dif < 7) return d.toLocaleDateString('pt-BR', { weekday: 'long' });
-  return d.toLocaleDateString('pt-BR');
-}
-
-// ---------- Reações ----------
-function reacoesHtml(id, reactions) {
-  const cont = {};
-  Object.values(reactions || {}).forEach(e => { cont[e] = (cont[e] || 0) + 1; });
-  const minha = (reactions || {})[usuarioAtual.id];
-  return Object.keys(cont).map(e =>
-    `<span class="reacao${e === minha ? ' minha' : ''}" onclick="reagir('${id}', '${e}')">${e} ${cont[e]}</span>`
-  ).join('');
-}
-
-function abrirReacoes(event, id) {
-  event.stopPropagation();
-  abrirMenuFlutuante(event.currentTarget,
-    `<div class="reacao-picker">${EMOJIS_REACAO.map(e => `<span onclick="reagir('${id}', '${e}')">${e}</span>`).join('')}</div>`);
-}
-
-function reagir(id, emoji) {
-  fecharMenuFlutuante();
-  socket.emit('react_message', { messageId: id, userId: usuarioAtual.id, emoji });
-}
-
-// ---------- Mensagem fixada ----------
-function renderBarraFixada() {
-  const barra = document.getElementById('barra-fixada');
-  if (!chatFixada) { barra.classList.add('oculto'); return; }
-  document.getElementById('barra-fixada-texto').textContent = chatFixada.snippet;
-  barra.classList.remove('oculto');
-}
-
-async function fixarMensagem(messageId) {
-  fecharMenuFlutuante();
-  await fetch(`/api/chats/${chatAtualId}/pin`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ userId: usuarioAtual.id, messageId })
-  });
 }
 
 function atualizarMensagemNaTela(msg) {
@@ -2343,18 +2237,6 @@ async function cancelarSolicitacaoConvite(code, btn) {
 }
 
 // ---------- Prévia de mensagem (usada na citação de resposta) ----------
-// nome mostrado na caixinha de citação, sempre do ponto de vista de quem está VENDO:
-// "Você" se a mensagem citada é minha, senão o nick de quem escreveu.
-function nomeDoCitado(rt) {
-  if (rt.userId === usuarioAtual.id) return 'Você';
-  if (rt.realName) return rt.realName;
-  const original = mensagensCacheAtual.get(rt.id);
-  if (original && original.senderUsername) return original.senderUsername;
-  // respostas antigas (sem realName): se o nome gravado não é "Você", serve; senão, no PV é o outro
-  if (rt.userName && rt.userName !== 'Você') return rt.userName;
-  if (chatAtualOutro && chatAtualOutro.username) return chatAtualOutro.username;
-  return 'Usuário';
-}
 function nomeDoRemetente(msg) {
   if (msg.senderId === usuarioAtual.id) return 'Você';
   return msg.senderUsername || 'Usuário removido';
@@ -2454,7 +2336,6 @@ function escolherMencao(username) {
   const depois = input.value.slice(mencaoAtiva.fim);
   const inserido = '@' + username + ' ';
   input.value = antes + inserido + depois;
-  atualizarBotoesInput();
   const posicao = (antes + inserido).length;
   input.focus();
   input.setSelectionRange(posicao, posicao);
@@ -2478,15 +2359,7 @@ function enviarTexto() {
   });
 
   input.value = '';
-  atualizarBotoesInput();
   cancelarResposta();
-}
-
-// celular: com texto digitado mostra "enviar", sem texto mostra o microfone (o CSS faz a troca)
-function atualizarBotoesInput() {
-  const input = document.getElementById('input-texto');
-  const area = input && input.closest('.input-area');
-  if (area) area.classList.toggle('digitando', input.value.trim().length > 0);
 }
 
 // ---------- Responder ----------
@@ -2497,9 +2370,6 @@ function responderMensagem(id) {
     id: msg.id,
     userId: msg.senderId,
     userName: nomeDoRemetente(msg),
-    // nome "de verdade" de quem escreveu — o userName acima vira "Você" pra quem respondeu,
-    // e esse texto fica gravado na mensagem, então o outro lado via "Você" errado.
-    realName: msg.senderId === usuarioAtual.id ? usuarioAtual.username : (msg.senderUsername || 'Usuário removido'),
     snippet: previaDaMensagem(msg)
   };
   document.getElementById('reply-preview-nome').textContent = respondendoA.userName;

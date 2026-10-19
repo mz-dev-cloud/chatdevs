@@ -60,10 +60,8 @@
 
       <div class="input-area">
         <div id="mencao-popup" class="mencao-popup oculto"></div>
-        <input id="input-texto" placeholder="Escreva uma mensagem..." aria-label="Mensagem" oninput="atualizarBotoesInput()" onkeydown="if(event.key==='Enter') enviarTexto()">
-        <button id="btn-anexo" type="button" onclick="document.getElementById('input-anexo').click()" aria-label="Anexar arquivo" title="Enviar foto, vídeo ou arquivo"><i class="mdi mdi-paperclip"></i></button>
-        <input type="file" id="input-anexo" hidden onchange="enviarAnexo(this.files[0])">
-        <button id="btn-enviar" onclick="enviarTexto()" aria-label="Enviar mensagem"><i class="mdi mdi-send"></i><span>Enviar</span></button>
+        <input id="input-texto" placeholder="Escreva uma mensagem..." aria-label="Mensagem" onkeydown="if(event.key==='Enter') enviarTexto()">
+        <button onclick="enviarTexto()" aria-label="Enviar mensagem"><i class="mdi mdi-send"></i><span>Enviar</span></button>
         <button id="btn-audio" onclick="alternarGravacao('audio')" aria-label="Gravar áudio"><i class="mdi mdi-microphone-outline"></i></button>
         <button id="btn-video" onclick="alternarGravacao('video')" aria-label="Gravar vídeo"><i class="mdi mdi-video-outline"></i></button>
       </div>

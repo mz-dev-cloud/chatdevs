@@ -219,13 +219,8 @@ function emitirMensagemSistemaPersonalizada(db, membros, msg) {
   });
 }
 
-// dono ATUAL do grupo. createdBy continua sendo só "quem criou" (aparece na descrição).
-// Quando o dono sai, ownerId vira null; se ele voltar depois, volta como membro comum.
-function donoDe(chat) {
-  return chat.ownerId !== undefined ? chat.ownerId : chat.createdBy;
-}
 function souDono(chat, userId) {
-  return !!userId && donoDe(chat) === userId;
+  return chat.createdBy === userId;
 }
 function souAdminDoGrupo(chat, userId) {
   return souDono(chat, userId) || (chat.admins || []).includes(userId);
@@ -659,23 +654,6 @@ app.post('/api/chats/:chatId/delete', (req, res) => {
   const chat = db.chats.find(c => c.id === chatId);
   if (!chat) return res.status(404).json({ error: 'Conversa não encontrada' });
 
-  if (chat.type === 'private' && chat.members.includes(userId)) {
-    const eAutoConversa = chat.members.every(m => m === userId);
-    if (!eAutoConversa) {
-      // PV: apagar é pessoal. Só some pra quem apagou (e o histórico antigo some pra ele);
-      // a outra pessoa continua com a conversa. Se os dois apagarem, aí sim limpa tudo.
-      if (!chat.hiddenAt) chat.hiddenAt = {};
-      chat.hiddenAt[userId] = Date.now();
-      if (chat.members.every(m => chat.hiddenAt[m])) {
-        apagarArquivosDoChat(db, chatId);
-        db.messages = db.messages.filter(m => m.chatId !== chatId);
-        db.chats = db.chats.filter(c => c.id !== chatId);
-      }
-      saveDB(db);
-      return res.json({ ok: true });
-    }
-  }
-
   if (chat.members.includes(userId)) {
     // membro de verdade: apaga a conversa inteira, pra todo mundo (comportamento de sempre)
     apagarArquivosDoChat(db, chatId);
@@ -709,7 +687,6 @@ app.post('/api/chats/:chatId/leave', (req, res) => {
     return res.status(400).json({ error: 'Você não está nesse grupo' });
   }
 
-  let novoAdminMsg = null;
   const quemSaiu = db.users.find(u => u.id === userId);
   const msg = criarMensagemSistema(
     chatId,
@@ -720,24 +697,8 @@ app.post('/api/chats/:chatId/leave', (req, res) => {
   // quem ainda vai ficar no grupo + quem tá saindo (pra ele ver a própria msg de saída antes de virar fantasma)
   const destinatarios = chat.members.slice();
 
-  const eraDono = souDono(chat, userId);
   chat.members = chat.members.filter(m => m !== userId);
   if (chat.admins) chat.admins = chat.admins.filter(a => a !== userId);
-  if (eraDono) {
-    // o dono saiu: o grupo fica sem dono (quem criou continua registrado em createdBy).
-    // Se não sobrou nenhum admin, um membro aleatório vira admin pro grupo não ficar sem ninguém.
-    chat.ownerId = null;
-    if (chat.members.length && !(chat.admins || []).length) {
-      const sorteado = chat.members[Math.floor(Math.random() * chat.members.length)];
-      chat.admins = [sorteado];
-      const alvo = db.users.find(u => u.id === sorteado);
-      novoAdminMsg = criarMensagemSistema(
-        chatId,
-        `${alvo ? alvo.username : 'Alguém'} agora é admin do grupo`,
-        { kind: 'promote', actorId: sorteado, targetId: sorteado }
-      );
-    }
-  }
 
   // mesma regra de quando é removido: continua vendo o histórico até agora
   // (modo fantasma), só não recebe mensagem nova nem consegue mandar
@@ -746,7 +707,6 @@ app.post('/api/chats/:chatId/leave', (req, res) => {
   chat.removedMembers.push({ userId, removedAt: Date.now() });
 
   db.messages.push(msg);
-  if (novoAdminMsg) db.messages.push(novoAdminMsg);
 
   if (chat.members.length === 0) {
     apagarArquivosDoChat(db, chatId);
@@ -756,7 +716,6 @@ app.post('/api/chats/:chatId/leave', (req, res) => {
 
   saveDB(db);
   emitirMensagemSistemaPersonalizada(db, destinatarios, msg);
-  if (novoAdminMsg) emitirMensagemSistemaPersonalizada(db, chat.members, novoAdminMsg);
   res.json({ ok: true });
 });
 
@@ -777,7 +736,7 @@ app.get('/api/chats/:chatId/members', (req, res) => {
       username: u ? u.username : 'Usuário removido',
       email: u ? u.email : null,
       photoUrl: u ? fotoParaViewer(db, u, userId) : null,
-      isOwner: id === donoDe(chat),
+      isOwner: id === chat.createdBy,
       isAdmin: admins.includes(id)
     };
   });
@@ -956,7 +915,7 @@ app.post('/api/invite/:code/join', (req, res) => {
     saveDB(db);
 
     const solicitante = db.users.find(u => u.id === userId);
-    const admins = [donoDe(chat), ...(chat.admins || [])].filter(Boolean);
+    const admins = chat.admins.includes(chat.createdBy) ? chat.admins : [chat.createdBy, ...chat.admins];
     admins.forEach(adminId => {
       io.to('user:' + adminId).emit('solicitacao_entrada', {
         chatId: chat.id,
@@ -1167,22 +1126,6 @@ app.post('/api/chats/:chatId/promote', (req, res) => {
   res.json({ ok: true });
 });
 
-// ---------- Tirar admin (só o dono do grupo pode) ----------
-app.post('/api/chats/:chatId/demote', (req, res) => {
-  const { chatId } = req.params;
-  const { userId, targetUserId } = req.body;
-  const db = loadDB();
-  const chat = db.chats.find(c => c.id === chatId);
-  if (!chat || chat.type !== 'group') return res.status(404).json({ error: 'Grupo não encontrado' });
-  if (!souDono(chat, userId)) return res.status(403).json({ error: 'Só o dono do grupo pode tirar admin' });
-  if (targetUserId === donoDe(chat)) return res.status(400).json({ error: 'O dono não pode perder o cargo' });
-  if (!(chat.admins || []).includes(targetUserId)) return res.json({ ok: true });
-
-  chat.admins = chat.admins.filter(a => a !== targetUserId);
-  saveDB(db);
-  res.json({ ok: true });
-});
-
 // ---------- Remover pessoa do grupo (dono ou admins podem) ----------
 app.post('/api/chats/:chatId/remove-member', (req, res) => {
   const { chatId } = req.params;
@@ -1191,7 +1134,7 @@ app.post('/api/chats/:chatId/remove-member', (req, res) => {
   const chat = db.chats.find(c => c.id === chatId);
   if (!chat || chat.type !== 'group') return res.status(404).json({ error: 'Grupo não encontrado' });
   if (!souAdminDoGrupo(chat, userId)) return res.status(403).json({ error: 'Só o dono ou admins podem remover pessoas' });
-  if (targetUserId === donoDe(chat)) return res.status(403).json({ error: 'Não é possível remover o dono do grupo' });
+  if (targetUserId === chat.createdBy) return res.status(403).json({ error: 'Não é possível remover o dono do grupo' });
   if (!chat.members.includes(targetUserId)) return res.status(400).json({ error: 'Essa pessoa não está no grupo' });
 
   const alvo = db.users.find(u => u.id === targetUserId);
@@ -1271,10 +1214,6 @@ app.get('/api/chats', (req, res) => {
   const db = loadDB();
 
   const chats = db.chats.filter(c => {
-    if (c.type === 'private' && c.hiddenAt && c.hiddenAt[userId]) {
-      // apaguei essa conversa: só volta pra lista se chegou mensagem depois disso
-      return db.messages.some(m => m.chatId === c.id && m.createdAt > c.hiddenAt[userId]);
-    }
     if (c.members.includes(userId)) return true;
     // grupo do qual a pessoa foi removida: continua na lista, em modo fantasma
     return (c.removedMembers || []).some(r => r.userId === userId);
@@ -1311,9 +1250,7 @@ app.get('/api/chats', (req, res) => {
     }
 
     // em modo fantasma, só enxerga (e só conta) mensagens de até o momento da remoção
-    const jaEntrouEm = c.type === 'group'
-      ? ((c.memberJoinedAt && c.memberJoinedAt[userId]) || 0)
-      : ((c.hiddenAt && c.hiddenAt[userId]) || 0);
+    const jaEntrouEm = c.type === 'group' ? ((c.memberJoinedAt && c.memberJoinedAt[userId]) || 0) : 0;
     const msgsDoChat = db.messages.filter(m =>
       m.chatId === c.id
       && (!removidoDoGrupo || m.createdAt <= registroRemocao.removedAt)
@@ -1335,7 +1272,6 @@ app.get('/api/chats', (req, res) => {
       otherEmail,
       ehAutoConversa,
       removidoDoGrupo,
-      arquivada: !!(c.archivedBy && c.archivedBy[userId]),
       lastMessage: ultima ? (ultima.deleted ? 'Mensagem apagada' : ultima.content) : null,
       unreadCount
     };
@@ -1379,9 +1315,7 @@ app.get('/api/chats/:chatId/messages', (req, res) => {
       if (m.chatId !== chatId) return false;
       if (!souMembro && m.createdAt > registroRemocao.removedAt) return false;
       // quem entrou no grupo depois não vê mensagens de antes de ter entrado
-      const jaEntrouEm = chat.type === 'group'
-        ? ((chat.memberJoinedAt && chat.memberJoinedAt[userId]) || 0)
-        : ((chat.hiddenAt && chat.hiddenAt[userId]) || 0);
+      const jaEntrouEm = chat.type === 'group' ? ((chat.memberJoinedAt && chat.memberJoinedAt[userId]) || 0) : 0;
       return m.createdAt >= jaEntrouEm;
     })
     .map(m => personalizarMensagem(m, userId, db))
@@ -1394,57 +1328,7 @@ app.get('/api/chats/:chatId/messages', (req, res) => {
         senderSaiuDoGrupo: chat.type === 'group' && !chat.members.includes(m.senderId)
       });
     });
-  res.json({ messages: mensagens, pinned: pinInfo(db, chat, userId) });
-});
-
-// ---------- Mensagem fixada: resumo mostrado na barra do topo ----------
-const EMOJIS_REACAO = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
-function pinInfo(db, chat, viewerId) {
-  if (!chat.pinned) return null;
-  const m = db.messages.find(x => x.id === chat.pinned.messageId);
-  if (!m || m.deleted) return null;
-  const desde = chat.type === 'group'
-    ? ((chat.memberJoinedAt && chat.memberJoinedAt[viewerId]) || 0)
-    : ((chat.hiddenAt && chat.hiddenAt[viewerId]) || 0);
-  if (m.createdAt < desde) return null;
-  const rotulos = { image: '📷 Foto', video: '🎥 Vídeo', audio: '🎤 Áudio', file: '📎 Arquivo' };
-  return { messageId: m.id, snippet: m.type === 'text' ? String(m.content || '').slice(0, 80) : (rotulos[m.type] || 'Mensagem') };
-}
-function emitirFixada(db, chat) {
-  chat.members.forEach(id => io.to('user:' + id).emit('pin_changed', { chatId: chat.id, pinned: pinInfo(db, chat, id) }));
-}
-
-app.post('/api/chats/:chatId/pin', (req, res) => {
-  const { userId, messageId } = req.body;
-  const db = loadDB();
-  const chat = db.chats.find(c => c.id === req.params.chatId);
-  if (!chat || !chat.members.includes(userId) || !podeEnviarMensagem(chat, userId)) {
-    return res.status(403).json({ error: 'Sem permissão' });
-  }
-  if (messageId) {
-    const m = db.messages.find(x => x.id === messageId && x.chatId === chat.id);
-    if (!m || m.deleted || m.type === 'system') return res.status(404).json({ error: 'Mensagem não encontrada' });
-    chat.pinned = { messageId, by: userId, at: Date.now() };
-  } else {
-    chat.pinned = null;
-  }
-  saveDB(db);
-  emitirFixada(db, chat);
-  res.json({ ok: true });
-});
-
-// ---------- Arquivar conversa (por usuário) ----------
-app.post('/api/chats/:chatId/archive', (req, res) => {
-  const { userId, archived } = req.body;
-  const db = loadDB();
-  const chat = db.chats.find(c => c.id === req.params.chatId);
-  if (!chat || !userId) return res.status(404).json({ error: 'Conversa não encontrada' });
-  const participa = chat.members.includes(userId) || (chat.removedMembers || []).some(r => r.userId === userId);
-  if (!participa) return res.status(403).json({ error: 'Sem acesso' });
-  chat.archivedBy = chat.archivedBy || {};
-  if (archived) chat.archivedBy[userId] = true; else delete chat.archivedBy[userId];
-  saveDB(db);
-  res.json({ ok: true });
+  res.json({ messages: mensagens });
 });
 
 // ---------- Socket.io (tempo real) ----------
@@ -1508,20 +1392,6 @@ io.on('connection', socket => {
     });
   });
 
-  socket.on('react_message', ({ messageId, userId, emoji }) => {
-    if (!EMOJIS_REACAO.includes(emoji)) return;
-    const db = loadDB();
-    const msg = db.messages.find(m => m.id === messageId);
-    if (!msg || msg.deleted || msg.type === 'system') return;
-    const chat = db.chats.find(c => c.id === msg.chatId);
-    if (!chat || !chat.members.includes(userId)) return;
-    msg.reactions = msg.reactions || {};
-    if (msg.reactions[userId] === emoji) delete msg.reactions[userId]; // clicar de novo tira
-    else msg.reactions[userId] = emoji;
-    saveDB(db);
-    chat.members.forEach(id => io.to('user:' + id).emit('message_reacted', { id: msg.id, chatId: msg.chatId, reactions: msg.reactions }));
-  });
-
   socket.on('edit_message', ({ messageId, userId, newContent }) => {
     const db = loadDB();
     const msg = db.messages.find(m => m.id === messageId);
@@ -1547,12 +1417,7 @@ io.on('connection', socket => {
     msg.deleted = true;
     msg.content = null;
     msg.mediaUrl = null;
-    msg.reactions = {};
-    const chatDaMsg = db.chats.find(c => c.id === msg.chatId);
-    const estavaFixada = chatDaMsg && chatDaMsg.pinned && chatDaMsg.pinned.messageId === msg.id;
-    if (estavaFixada) chatDaMsg.pinned = null;
     saveDB(db);
-    if (estavaFixada) emitirFixada(db, chatDaMsg);
 
     io.to('chat:' + msg.chatId).emit('message_deleted', { id: msg.id });
   });
