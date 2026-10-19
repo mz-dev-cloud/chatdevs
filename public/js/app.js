@@ -502,7 +502,7 @@ function entrarNoChat() {
     carregarListaChats();
   });
   socket.on('solicitacao_entrada', ({ chatId, chatName, username }) => {
-    mostrarAviso(`${username} quer entrar no grupo "${chatName}"`);
+    // sem popup pro admin: o pedido aparece só na lista de pedidos do grupo (com o contador)
     if (chatId === chatAtualId) atualizarBadgePedidos(chatId);
   });
   socket.on('solicitacao_recusada', ({ chatName }) => {
@@ -1290,6 +1290,9 @@ async function renderConfigGrupoModal(chatId) {
     if (data.souDono && !m.isOwner && !m.isAdmin) {
       botoes += `<button class="btn-outline btn-compacto" onclick="promoverNoModal('${chatId}', '${m.id}')">Tornar admin</button>`;
     }
+    if (data.souDono && !m.isOwner && m.isAdmin) {
+      botoes += `<button class="btn-outline btn-compacto" onclick="rebaixarNoModal('${chatId}', '${m.id}')">Tirar admin</button>`;
+    }
     if ((data.souDono || data.souAdmin) && !m.isOwner && m.id !== usuarioAtual.id) {
       botoes += `<button class="btn-outline btn-compacto" onclick="removerDoModal('${chatId}', '${m.id}', '${escapeHtml(m.username)}')">Remover</button>`;
     }
@@ -1739,6 +1742,17 @@ async function promoverNoModal(chatId, targetUserId) {
   renderConfigGrupoModal(chatId);
 }
 
+async function rebaixarNoModal(chatId, targetUserId) {
+  const resp = await fetch(`/api/chats/${chatId}/demote`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId: usuarioAtual.id, targetUserId })
+  });
+  const data = await resp.json();
+  if (!resp.ok) { mostrarAviso(data.error || 'Não foi possível tirar o admin.'); return; }
+  renderConfigGrupoModal(chatId);
+}
+
 async function removerDoModal(chatId, targetUserId, username) {
   const aceitou = await abrirConfirmacao({
     titulo: 'Remover do grupo',
@@ -1761,7 +1775,9 @@ async function apagarConversa(chatId, removido) {
   document.querySelectorAll('.dropdown-menu').forEach(el => el.classList.add('oculto'));
   const mensagem = removido
     ? 'Apagar essa conversa da sua lista? Ela só some pra você.'
-    : 'Apagar essa conversa? Isso apaga pra todo mundo que participa dela, não só pra você.';
+    : ((todasAsConversas.find(c => c.id === chatId) || {}).type === 'group')
+      ? 'Apagar essa conversa? Isso apaga pra todo mundo que participa dela, não só pra você.'
+      : 'Apagar essa conversa? Ela só some pra você, a outra pessoa continua com ela.';
   const aceitou = await abrirConfirmacao({ titulo: 'Apagar conversa', mensagem, textoBotao: 'Apagar' });
   if (!aceitou) return;
 
