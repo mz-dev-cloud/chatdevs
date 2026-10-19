@@ -435,7 +435,19 @@ function entrarNoChat() {
   aplicarConfig(carregarConfig());
 
   socket = io();
-  socket.emit('join', { userId: usuarioAtual.id });
+  // 'connect' dispara na conexão inicial E em toda reconexão (celular que bloqueou a tela,
+  // troca de wifi pra 4G, servidor reiniciando). A cada vez o servidor enxerga um socket novo,
+  // sem sala nenhuma — então precisa entrar de novo, senão as mensagens param de chegar.
+  socket.on('connect', () => {
+    socket.emit('join', { userId: usuarioAtual.id });
+    if (chatAtualId) socket.emit('join_chat', chatAtualId);
+    if (socket.recuperar) { socket.recuperar = false; recarregarEstadoAtual(); }
+  });
+  socket.on('disconnect', () => { socket.recuperar = true; });
+  sincronizarContatos();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') recarregarEstadoAtual();
+  });
   socket.on('send_message_error', payload => {
     mostrarAviso(payload && payload.message ? payload.message : 'Não foi possível enviar a mídia.');
   });
@@ -558,6 +570,23 @@ async function marcarComoLida(chatId) {
     body: JSON.stringify({ userId: usuarioAtual.id })
   });
   carregarListaChats();
+}
+
+// busca de novo o que pode ter sido perdido enquanto o aparelho estava desconectado/dormindo
+async function recarregarEstadoAtual() {
+  if (!usuarioAtual) return;
+  try {
+    await carregarListaChats();
+    sincronizarContatos();
+    if (chatAtualId) {
+      const resp = await fetch(`/api/chats/${chatAtualId}/messages?userId=${usuarioAtual.id}`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      (data.messages || []).forEach(m => {
+        if (!document.querySelector(`[data-id="${m.id}"]`)) renderizarMensagem(m);
+      });
+    }
+  } catch (e) { /* tenta de novo na próxima reconexão */ }
 }
 
 // ---------- Lista de conversas ----------
@@ -715,25 +744,48 @@ async function carregarStats() {
   }
 }
 
-// ---------- Contatos salvos (fica só no navegador, não no servidor) ----------
+// ---------- Contatos salvos (ficam no SERVIDOR, iguais em qualquer aparelho) ----------
+// contatosCache é só uma cópia em memória da lista do servidor, pra tela não esperar rede.
+let contatosCache = [];
+
 function carregarContatos() {
-  if (!usuarioAtual) return [];
-  try { return JSON.parse(localStorage.getItem('contatos_' + usuarioAtual.id) || '[]'); }
-  catch (e) { return []; }
-}
-function salvarContatos(lista) {
-  localStorage.setItem('contatos_' + usuarioAtual.id, JSON.stringify(lista));
+  return contatosCache;
 }
 function contatoSalvo(id) {
-  return carregarContatos().some(c => c.id === id);
+  return contatosCache.some(c => c.id === id);
 }
 function salvarContato(contato) {
-  const contatos = carregarContatos().filter(c => c.id !== contato.id);
-  contatos.unshift(contato);
-  salvarContatos(contatos);
+  contatosCache = contatosCache.filter(c => c.id !== contato.id);
+  contatosCache.unshift({ id: contato.id, username: contato.username, email: contato.email || null, photoUrl: contato.photoUrl || null });
 }
 function apagarContato(id) {
-  salvarContatos(carregarContatos().filter(c => c.id !== id));
+  contatosCache = contatosCache.filter(c => c.id !== id);
+}
+
+// baixa a lista do servidor. Na primeira vez em que este navegador roda a versão nova,
+// sobe pro servidor os contatos que estavam só no localStorage (pra ninguém perder os antigos).
+async function sincronizarContatos() {
+  if (!usuarioAtual) return;
+  const chaveAntiga = 'contatos_' + usuarioAtual.id;
+  try {
+    const antigos = JSON.parse(localStorage.getItem(chaveAntiga) || '[]');
+    if (antigos.length) {
+      await Promise.all(antigos.map(c => fetch('/api/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ownerId: usuarioAtual.id, contactId: c.id })
+      })));
+    }
+    localStorage.removeItem(chaveAntiga);
+  } catch (e) { /* sem problema, segue com a lista do servidor */ }
+
+  try {
+    const resp = await fetch('/api/contacts?ownerId=' + encodeURIComponent(usuarioAtual.id));
+    if (!resp.ok) return;
+    const data = await resp.json();
+    contatosCache = data.contacts || [];
+    renderContatoBanner();
+  } catch (e) { /* offline: mantém o que já tinha */ }
 }
 
 function abrirNovaConversa() {

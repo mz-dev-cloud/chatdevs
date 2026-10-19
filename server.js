@@ -24,32 +24,78 @@ app.get('/admin', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// ---------- Upload de mídia (áudio/vídeo) ----------
-fs.mkdirSync(path.join(__dirname, 'uploads'), { recursive: true });
+// ---------- Upload de mídia (áudio/vídeo/imagem) ----------
+// Os arquivos ficam no MongoDB (GridFS), NÃO no disco. No Railway o disco é apagado a cada
+// deploy/reinício — por isso as fotos davam 404. No banco elas sobrevivem a tudo.
+const mongoose = require('mongoose');
+let bucket = null;
+function getBucket() {
+  if (!bucket) bucket = new mongoose.mongo.GridFSBucket(mongoose.connection.db, { bucketName: 'midia' });
+  return bucket;
+}
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, path.join(__dirname, 'uploads')),
-    filename: (req, file, cb) => {
-      const ext = path.extname(file.originalname) || '';
-      cb(null, uuidv4() + ext);
-    }
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 } // 25MB
 });
 
 app.post('/api/upload', upload.single('file'), (req, res) => {
-  if (!req.file || !req.file.filename || !req.file.size) {
+  if (!req.file || !req.file.buffer || !req.file.size) {
     return res.status(400).json({ error: 'O arquivo não foi recebido corretamente.' });
   }
-  res.status(201).json({
-    url: '/uploads/' + req.file.filename,
-    filename: req.file.filename,
-    size: req.file.size,
-    mimeType: req.file.mimetype || 'application/octet-stream'
+  const filename = uuidv4() + (path.extname(req.file.originalname || '') || '');
+  const mimeType = req.file.mimetype || 'application/octet-stream';
+  const stream = getBucket().openUploadStream(filename, { metadata: { mimeType } });
+  stream.on('error', e => {
+    console.error('[upload] erro ao salvar:', e.message);
+    res.status(500).json({ error: 'Não foi possível salvar o arquivo.' });
   });
+  stream.on('finish', () => {
+    res.status(201).json({
+      url: '/uploads/' + filename,
+      filename,
+      size: req.file.size,
+      mimeType
+    });
+  });
+  stream.end(req.file.buffer);
 });
+
+// serve o arquivo (com suporte a Range, que o Safari/iPhone exige pra tocar áudio e vídeo)
+app.get('/uploads/:filename', async (req, res) => {
+  try {
+    const arquivos = await getBucket().find({ filename: req.params.filename }).limit(1).toArray();
+    if (!arquivos.length) return res.status(404).end();
+    const f = arquivos[0];
+    const total = f.length;
+    const tipo = (f.metadata && f.metadata.mimeType) || 'application/octet-stream';
+    res.set({ 'Content-Type': tipo, 'Accept-Ranges': 'bytes', 'Cache-Control': 'public, max-age=86400' });
+
+    const range = req.headers.range && /bytes=(\d*)-(\d*)/.exec(req.headers.range);
+    if (range && total > 0) {
+      let ini = range[1] === '' ? total - parseInt(range[2], 10) : parseInt(range[1], 10);
+      let fim = range[1] === '' || range[2] === '' ? total - 1 : parseInt(range[2], 10);
+      if (isNaN(ini) || isNaN(fim) || ini < 0) ini = 0;
+      if (fim >= total) fim = total - 1;
+      if (ini > fim) return res.status(416).set('Content-Range', `bytes */${total}`).end();
+      res.status(206).set({ 'Content-Range': `bytes ${ini}-${fim}/${total}`, 'Content-Length': fim - ini + 1 });
+      return getBucket().openDownloadStream(f._id, { start: ini, end: fim + 1 }).pipe(res);
+    }
+    res.set('Content-Length', total);
+    getBucket().openDownloadStream(f._id).on('error', () => res.end()).pipe(res);
+  } catch (e) {
+    console.error('[uploads] erro:', e.message);
+    res.status(500).end();
+  }
+});
+
+// apaga um arquivo de mídia a partir da URL ('/uploads/xxx.jpg')
+function apagarArquivo(mediaUrl) {
+  if (!mediaUrl || typeof mediaUrl !== 'string' || !mediaUrl.startsWith('/uploads/')) return;
+  const nome = mediaUrl.slice('/uploads/'.length);
+  getBucket().find({ filename: nome }).toArray()
+    .then(fs_ => Promise.all(fs_.map(f => getBucket().delete(f._id))))
+    .catch(() => {});
+}
 
 // ---------- Helpers ----------
 function getClientIp(req) {
@@ -337,6 +383,20 @@ app.post('/api/contacts', (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Lista de contatos salvos (fica no servidor, igual em qualquer aparelho) ----------
+app.get('/api/contacts', (req, res) => {
+  const { ownerId } = req.query;
+  if (!ownerId) return res.status(400).json({ error: 'Dados incompletos' });
+  const db = loadDB();
+  const contatos = db.contacts
+    .filter(c => c.ownerId === ownerId)
+    .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0))
+    .map(c => db.users.find(u => u.id === c.contactId))
+    .filter(Boolean)
+    .map(u => ({ id: u.id, username: u.username, email: u.email || null, photoUrl: fotoParaViewer(db, u, ownerId) }));
+  res.json({ contacts: contatos });
+});
+
 // ---------- Apagar contato de vez (não é só cosmético — some da regra de privacidade também) ----------
 app.post('/api/contacts/remove', (req, res) => {
   const { ownerId, contactId } = req.body;
@@ -582,8 +642,7 @@ function apagarArquivosDoChat(db, chatId) {
   db.messages
     .filter(m => m.chatId === chatId && m.mediaUrl)
     .forEach(m => {
-      const filePath = path.join(__dirname, m.mediaUrl);
-      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      apagarArquivo(m.mediaUrl);
     });
 }
 
@@ -1352,8 +1411,7 @@ io.on('connection', socket => {
     if (!msg || msg.senderId !== userId) return;
 
     if (msg.mediaUrl) {
-      const filePath = path.join(__dirname, msg.mediaUrl);
-      fs.unlink(filePath, () => {});
+      apagarArquivo(msg.mediaUrl);
     }
 
     msg.deleted = true;
@@ -1371,8 +1429,7 @@ function limparMidiaAntiga() {
   let mudou = false;
   db.messages.forEach(m => {
     if (m.mediaUrl && m.mediaCreatedAt && Date.now() - m.mediaCreatedAt > VIDA_MIDIA_MS) {
-      const filePath = path.join(__dirname, m.mediaUrl);
-      fs.unlink(filePath, () => {});
+      apagarArquivo(m.mediaUrl);
       m.mediaUrl = null;
       m.mediaExpired = true;
       mudou = true;
