@@ -164,6 +164,9 @@
             <div class="dropdown-item dropdown-clicavel" onclick="filtrarConversas('grupo')">
               <span>Somente grupos</span>
             </div>
+            <div class="dropdown-item dropdown-clicavel" onclick="filtrarConversas('arquivadas')">
+              <span>Arquivadas</span>
+            </div>
           </div>
         </div>
 
@@ -235,6 +238,10 @@
             </div>
           </div>
           <div id="contato-banner" class="contato-banner oculto"></div>
+          <div id="barra-fixada" class="barra-fixada oculto">
+            <span onclick="irParaMensagem(chatFixada && chatFixada.messageId)">📌 <span id="barra-fixada-texto"></span></span>
+            <button onclick="fixarMensagem(null)" aria-label="Desafixar">✕</button>
+          </div>
           <div id="mensagens" class="mensagens"></div>
 
           <div id="reply-preview" class="reply-preview" style="display:none">
