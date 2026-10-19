@@ -1526,6 +1526,7 @@ app.get('/api/chats', (req, res) => {
       archived: Array.isArray(c.archivedBy) && c.archivedBy.includes(userId),
       pinnedMessageId: c.pinnedMessageId || null,
       lastMessage: ultima ? (ultima.deleted ? 'Mensagem apagada' : ultima.content) : null,
+      lastMessageAt: ultima ? ultima.createdAt : null,
       unreadCount
     };
   });
