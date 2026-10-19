@@ -4400,3 +4400,10 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
 }
 .arq-cartao:hover .arq-nome { text-decoration: underline; }
 .arq-sub { font-family: 'IBM Plex Mono', monospace; font-size: 10.5px; opacity: .72; }
+
+/* Menus do topo (⋮ da conta e troca de conta) ficam acima do cabeçalho do chat (z-index 120).
+   Sem isso, o .topbar não cria camada própria e os menus (z-index 80) passavam por baixo. */
+.topbar { position: relative; z-index: 500; }
+/* menu flutuante da lista de conversas e avisos (toast) também acima de tudo, inclusive do modal (2000) */
+#menu-flutuante { z-index: 600; }
+.toast { z-index: 3000; }
