@@ -1335,6 +1335,7 @@ app.get('/api/chats', (req, res) => {
       otherEmail,
       ehAutoConversa,
       removidoDoGrupo,
+      arquivada: !!(c.archivedBy && c.archivedBy[userId]),
       lastMessage: ultima ? (ultima.deleted ? 'Mensagem apagada' : ultima.content) : null,
       unreadCount
     };
@@ -1393,7 +1394,57 @@ app.get('/api/chats/:chatId/messages', (req, res) => {
         senderSaiuDoGrupo: chat.type === 'group' && !chat.members.includes(m.senderId)
       });
     });
-  res.json({ messages: mensagens });
+  res.json({ messages: mensagens, pinned: pinInfo(db, chat, userId) });
+});
+
+// ---------- Mensagem fixada: resumo mostrado na barra do topo ----------
+const EMOJIS_REACAO = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+function pinInfo(db, chat, viewerId) {
+  if (!chat.pinned) return null;
+  const m = db.messages.find(x => x.id === chat.pinned.messageId);
+  if (!m || m.deleted) return null;
+  const desde = chat.type === 'group'
+    ? ((chat.memberJoinedAt && chat.memberJoinedAt[viewerId]) || 0)
+    : ((chat.hiddenAt && chat.hiddenAt[viewerId]) || 0);
+  if (m.createdAt < desde) return null;
+  const rotulos = { image: '📷 Foto', video: '🎥 Vídeo', audio: '🎤 Áudio', file: '📎 Arquivo' };
+  return { messageId: m.id, snippet: m.type === 'text' ? String(m.content || '').slice(0, 80) : (rotulos[m.type] || 'Mensagem') };
+}
+function emitirFixada(db, chat) {
+  chat.members.forEach(id => io.to('user:' + id).emit('pin_changed', { chatId: chat.id, pinned: pinInfo(db, chat, id) }));
+}
+
+app.post('/api/chats/:chatId/pin', (req, res) => {
+  const { userId, messageId } = req.body;
+  const db = loadDB();
+  const chat = db.chats.find(c => c.id === req.params.chatId);
+  if (!chat || !chat.members.includes(userId) || !podeEnviarMensagem(chat, userId)) {
+    return res.status(403).json({ error: 'Sem permissão' });
+  }
+  if (messageId) {
+    const m = db.messages.find(x => x.id === messageId && x.chatId === chat.id);
+    if (!m || m.deleted || m.type === 'system') return res.status(404).json({ error: 'Mensagem não encontrada' });
+    chat.pinned = { messageId, by: userId, at: Date.now() };
+  } else {
+    chat.pinned = null;
+  }
+  saveDB(db);
+  emitirFixada(db, chat);
+  res.json({ ok: true });
+});
+
+// ---------- Arquivar conversa (por usuário) ----------
+app.post('/api/chats/:chatId/archive', (req, res) => {
+  const { userId, archived } = req.body;
+  const db = loadDB();
+  const chat = db.chats.find(c => c.id === req.params.chatId);
+  if (!chat || !userId) return res.status(404).json({ error: 'Conversa não encontrada' });
+  const participa = chat.members.includes(userId) || (chat.removedMembers || []).some(r => r.userId === userId);
+  if (!participa) return res.status(403).json({ error: 'Sem acesso' });
+  chat.archivedBy = chat.archivedBy || {};
+  if (archived) chat.archivedBy[userId] = true; else delete chat.archivedBy[userId];
+  saveDB(db);
+  res.json({ ok: true });
 });
 
 // ---------- Socket.io (tempo real) ----------
@@ -1457,6 +1508,20 @@ io.on('connection', socket => {
     });
   });
 
+  socket.on('react_message', ({ messageId, userId, emoji }) => {
+    if (!EMOJIS_REACAO.includes(emoji)) return;
+    const db = loadDB();
+    const msg = db.messages.find(m => m.id === messageId);
+    if (!msg || msg.deleted || msg.type === 'system') return;
+    const chat = db.chats.find(c => c.id === msg.chatId);
+    if (!chat || !chat.members.includes(userId)) return;
+    msg.reactions = msg.reactions || {};
+    if (msg.reactions[userId] === emoji) delete msg.reactions[userId]; // clicar de novo tira
+    else msg.reactions[userId] = emoji;
+    saveDB(db);
+    chat.members.forEach(id => io.to('user:' + id).emit('message_reacted', { id: msg.id, chatId: msg.chatId, reactions: msg.reactions }));
+  });
+
   socket.on('edit_message', ({ messageId, userId, newContent }) => {
     const db = loadDB();
     const msg = db.messages.find(m => m.id === messageId);
@@ -1482,7 +1547,12 @@ io.on('connection', socket => {
     msg.deleted = true;
     msg.content = null;
     msg.mediaUrl = null;
+    msg.reactions = {};
+    const chatDaMsg = db.chats.find(c => c.id === msg.chatId);
+    const estavaFixada = chatDaMsg && chatDaMsg.pinned && chatDaMsg.pinned.messageId === msg.id;
+    if (estavaFixada) chatDaMsg.pinned = null;
     saveDB(db);
+    if (estavaFixada) emitirFixada(db, chatDaMsg);
 
     io.to('chat:' + msg.chatId).emit('message_deleted', { id: msg.id });
   });
