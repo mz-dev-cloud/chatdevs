@@ -4472,3 +4472,62 @@ button,input { font:inherit; } button { transition:transform .2s ease,box-shadow
   #mensagens .msg .acoes { display:flex; flex-wrap:wrap; gap:8px; opacity:.88; }
   #mensagens .msg .acoes span { padding:3px 0; }
 }
+
+
+/* Chat interactions: actions stay hidden until long-press/context menu. */
+#mensagens .msg .acoes { display:none !important; opacity:0; pointer-events:none; }
+#mensagens .msg.menu-mensagem-aberto .acoes { display:flex !important; opacity:1; pointer-events:auto; animation:msgActionsIn .16s ease both; }
+#mensagens .msg { -webkit-touch-callout:none; }
+#mensagens .msg.menu-mensagem-aberto { z-index:12; }
+#mensagens .msg.menu-mensagem-aberto .conteudo { outline:1px solid color-mix(in srgb,var(--accent) 28%,transparent); outline-offset:3px; }
+#mensagens .msg .btn-responder-rapido { display:none !important; }
+@keyframes msgActionsIn { from { opacity:0; transform:translateY(5px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } }
+
+/* Quick reaction rail appears only after double-tap; plus opens the full emoji keyboard. */
+.reaction-picker { display:none !important; }
+.reaction-picker.aberto { display:flex !important; }
+.reaction-picker.completo { display:block !important; width:min(344px, calc(100vw - 42px)); max-height:min(310px, 44vh); overflow:hidden; padding:8px; }
+.reaction-grid { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:2px; max-height:calc(min(310px, 44vh) - 43px); overflow-y:auto; overscroll-behavior:contain; scrollbar-width:thin; }
+.reaction-grid .reaction-option { width:100%; min-width:0; height:34px; padding:4px; }
+.reaction-grid .reaction-option img { width:23px; height:23px; }
+.reaction-picker-foot { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 3px 1px; color:var(--text-muted); font-size:10px; border-top:1px solid color-mix(in srgb,var(--border) 70%,transparent); }
+.reaction-more { border:1px solid color-mix(in srgb,var(--border) 75%,transparent); background:color-mix(in srgb,var(--bg-panel) 85%,white 4%); color:var(--text); font-size:19px; }
+.reaction-close { border:0; background:transparent; color:var(--text-muted); font-size:19px; cursor:pointer; }
+@media(max-width:600px) { .reaction-picker.completo { left:0; width:min(344px,calc(100vw - 38px)); } .reaction-grid { grid-template-columns:repeat(7,minmax(0,1fr)); } }
+
+/* WhatsApp-like pinned message index above the conversation history. */
+.mensagem-fixada-topo { display:flex; align-items:center; gap:10px; width:100%; min-width:0; padding:10px 15px; text-align:left; border:0; border-bottom:1px solid color-mix(in srgb,var(--border) 75%,transparent); background:color-mix(in srgb,var(--bg-panel) 96%,#fff 2%); color:var(--text); cursor:pointer; }
+.pin-banner-icon { display:grid; place-items:center; flex:0 0 32px; width:32px; height:32px; border:1px solid color-mix(in srgb,var(--accent) 25%,var(--border)); border-radius:10px; color:var(--accent); background:color-mix(in srgb,var(--accent) 9%,transparent); }
+.pin-banner-copy { display:flex; flex:1; flex-direction:column; gap:2px; min-width:0; }
+.pin-banner-copy strong { font-size:11px; font-weight:750; letter-spacing:.02em; }
+.pin-banner-copy small { overflow:hidden; color:var(--text-muted); font-size:11px; line-height:1.35; text-overflow:ellipsis; white-space:nowrap; }
+.pin-banner-arrow { color:var(--text-muted); font-size:19px; }
+#mensagens .msg-destacada { animation:pinnedMessageFlash 1.4s ease; }
+@keyframes pinnedMessageFlash { 0%,100% { filter:none; } 30%,65% { filter:drop-shadow(0 0 10px color-mix(in srgb,var(--accent) 42%,transparent)); } }
+
+/* Compact matte conversation cards and archive shortcut at the top. */
+.lista-chats { gap:6px !important; padding:6px 1px 16px !important; }
+.lista-chats > .item-chat { gap:5px !important; min-height:0 !important; padding:10px 11px !important; border:1px solid #343943 !important; border-radius:14px !important; background:linear-gradient(145deg,#191c22,#15171c) !important; box-shadow:0 3px 10px rgba(0,0,0,.13),inset 0 1px 0 rgba(255,255,255,.018) !important; }
+.lista-chats > .item-chat:hover,.lista-chats > .item-chat:focus-within { transform:none; border-color:#4b5361 !important; box-shadow:0 5px 13px rgba(0,0,0,.2) !important; }
+.lista-chats > .item-chat.ativo { border-color:#596170 !important; background:linear-gradient(145deg,#20242b,#191c22) !important; }
+.lista-chats > .item-chat .item-chat-titulo { gap:10px !important; }
+.lista-chats > .item-chat .item-chat-titulo .avatar-circle { width:39px !important; height:39px !important; flex-basis:39px !important; }
+.lista-chats > .item-chat .nome { font-size:13px !important; line-height:1.25 !important; font-weight:700 !important; }
+.lista-chats > .item-chat .item-menu-btn { width:28px !important; height:28px !important; flex-basis:28px !important; border-radius:9px !important; }
+.lista-chats > .item-chat .item-chat-preview-row { padding:0 1px 0 49px !important; gap:8px !important; min-height:16px !important; }
+.lista-chats > .item-chat .preview { min-width:0; flex:1; font-size:11px !important; line-height:1.35 !important; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.item-chat-meta { display:flex; align-items:center; justify-content:flex-end; gap:7px; flex:0 0 auto; }
+.item-chat-meta time { color:#8c94a3; font-size:10px; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.item-chat-meta .badge-nao-lidas { min-width:17px; height:17px; padding:0 4px; font-size:9px; }
+.caixa-arquivadas { display:flex; align-items:center; gap:10px; width:100%; padding:11px 12px; margin:0 0 4px; border:1px solid #343943; border-radius:13px; background:linear-gradient(145deg,#202329,#181a20); color:var(--text); text-align:left; cursor:pointer; }
+.caixa-arquivadas-icone { display:grid; place-items:center; width:37px; height:37px; flex:0 0 37px; border-radius:11px; color:#c2c8d2; background:#2b3039; font-size:19px; }
+.caixa-arquivadas-copy { display:flex; flex:1; min-width:0; flex-direction:column; gap:3px; }
+.caixa-arquivadas-copy strong { font-size:12px; font-weight:750; }
+.caixa-arquivadas-copy small { color:var(--text-muted); font-size:10px; }
+.caixa-arquivadas > .mdi-chevron-right { color:var(--text-muted); font-size:18px; }
+@media(max-width:600px) { .lista-chats { gap:6px !important; padding:5px 0 14px !important; } .lista-chats > .item-chat { padding:9px 10px !important; } .lista-chats > .item-chat .item-chat-titulo .avatar-circle { width:37px !important; height:37px !important; flex-basis:37px !important; } .lista-chats > .item-chat .item-chat-preview-row { padding-left:47px !important; } }
+@media(prefers-reduced-motion:reduce) { #mensagens .msg.menu-mensagem-aberto .acoes,.msg-destacada { animation:none !important; } }
+
+.item-chat-meta time { display:flex; flex-direction:column; align-items:flex-end; gap:1px; }
+.item-chat-time-hour { color:#c4cad4; font-size:10px; line-height:1.2; }
+.item-chat-time-date { color:#777f8e; font-size:9px; line-height:1.2; }
