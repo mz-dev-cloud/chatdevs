@@ -69,6 +69,7 @@
           <p id="login-erro" class="erro-msg"></p>
           <button type="submit" class="btn-ok auth-submit"><span>Entrar na minha conta</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
         </form>
+        <button type="button" class="auth-google-btn" onclick="entrarComGoogle()"><svg class="google-g" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.01 13.22l7.98 6.19C11.92 13.72 17.48 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.74 7.18l7.73 6C44.43 37.99 46.98 31.93 46.98 24.55z"/><path fill="#FBBC05" d="M9.99 28.59A14.4 14.4 0 0 1 9.2 24c0-1.59.27-3.13.76-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.87.93 7.52 2.58 10.78l7.41-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.91-5.8l-7.73-6c-2.15 1.45-4.92 2.3-8.18 2.3-6.52 0-12.08-4.22-14.01-10.09l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg> Continuar com Google</button>
         <div class="auth-switch"><span>Ainda não faz parte?</span><button class="link-sutil" onclick="mostrarTela('cadastro')">Criar uma conta <span>↗</span></button></div>
         <div class="auth-card-bottom"><span class="auth-bottom-mark">✳</span> Feito para boas ideias se encontrarem.</div>
       </section>
@@ -98,10 +99,23 @@
           <p id="reg-erro" class="erro-msg"></p>
           <button type="submit" class="btn-ok auth-submit"><span>Criar minha conta</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
         </form>
+        <button type="button" class="auth-google-btn" onclick="entrarComGoogle()"><svg class="google-g" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.01 13.22l7.98 6.19C11.92 13.72 17.48 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.74 7.18l7.73 6C44.43 37.99 46.98 31.93 46.98 24.55z"/><path fill="#FBBC05" d="M9.99 28.59A14.4 14.4 0 0 1 9.2 24c0-1.59.27-3.13.76-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.87.93 7.52 2.58 10.78l7.41-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.91-5.8l-7.73-6c-2.15 1.45-4.92 2.3-8.18 2.3-6.52 0-12.08-4.22-14.01-10.09l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg> Criar conta com Google</button>
         <div class="auth-switch"><span>Já tem uma conta?</span><button class="link-sutil" onclick="mostrarTela('login')">Entrar agora <span>↗</span></button></div>
         <div class="auth-card-bottom"><span class="auth-bottom-mark">✳</span> Seu próximo projeto começa com uma conversa.</div>
       </section>
     </div>
+  </div>
+
+  <!-- VERIFICAÇÃO DE EMAIL -->
+  <div id="verificacao-screen" class="screen auth-screen oculto">
+    <div class="auth-ambient auth-ambient-one" aria-hidden="true"></div><div class="auth-ambient auth-ambient-two" aria-hidden="true"></div>
+    <div class="auth-layout auth-layout-verify"><section class="auth-panel auth-card auth-verify-card">
+      <div class="verify-orbit"><span class="mdi mdi-email-check-outline"></span></div>
+      <div class="auth-heading"><span class="auth-mobile-brand">CHATDEVS / VERIFICAÇÃO</span><h1>Confirme seu email<span class="heading-period">.</span></h1><p>Enviamos um código de 6 dígitos para <strong id="verify-email-label">seu email</strong>. Ele expira em 15 minutos.</p></div>
+      <form onsubmit="event.preventDefault(); verificarCodigoEmail();"><label class="auth-label" for="verify-code">Código de verificação</label><input id="verify-code" class="campo verify-code-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="[0-9]{6}" placeholder="000000" required><p id="verify-erro" class="erro-msg"></p><button type="submit" class="btn-ok auth-submit"><span>Verificar e ativar conta</span><span class="mdi mdi-arrow-right"></span></button></form>
+      <p class="verify-help">Não encontrou? Confira a caixa de spam ou lixo eletrônico. Você também pode tocar em <strong>Verificar meu email</strong> na mensagem para confirmar sem digitar o código.</p>
+      <div class="auth-switch"><span>Usar outro email?</span><button class="link-sutil" onclick="mostrarTela('cadastro')">Voltar ao cadastro ↗</button></div>
+    </section></div>
   </div>
 
   <!-- CHAT / HOME -->
@@ -164,6 +178,10 @@
             <div class="dropdown-item dropdown-clicavel" onclick="filtrarConversas('grupo')">
               <span>Somente grupos</span>
             </div>
+            <div class="dropdown-item dropdown-clicavel" onclick="filtrarConversas('arquivadas')">
+              <i class="mdi mdi-archive-outline"></i><span>Conversas arquivadas</span>
+            </div>
+            <div class="dropdown-item dropdown-clicavel" onclick="buscarPerfilPorNumero()"><span class="mdi mdi-identifier"></span><span>Buscar perfil por número</span></div>
           </div>
         </div>
 
@@ -248,15 +266,15 @@
 
           <div class="input-area">
             <div id="mencao-popup" class="mencao-popup oculto"></div>
-            <input id="input-texto" placeholder="Digite uma mensagem" onkeydown="if(event.key==='Enter') enviarTexto()">
-            <input type="file" id="input-anexo" style="display:none" accept="image/*,.pdf,.doc,.docx,audio/*,video/*" onchange="enviarAnexo(this.files[0])">
+            <input id="input-texto" placeholder="Digite uma mensagem" oninput="atualizarBotoesInput()" onkeydown="if(event.key==='Enter') enviarTexto()">
+            <input type="file" id="input-anexo" style="display:none" onchange="enviarAnexo(this.files[0])">
             <button id="btn-anexo" onclick="document.getElementById('input-anexo').click()" title="Anexar foto ou arquivo" aria-label="Anexar arquivo">
-              <i class="mdi mdi-image-outline" aria-hidden="true"></i>
+              <i class="mdi mdi-paperclip" aria-hidden="true"></i>
             </button>
             <button id="btn-audio" onclick="alternarGravacao('audio')" title="Gravar áudio" aria-label="Gravar áudio">
               <i class="mdi mdi-microphone-outline" aria-hidden="true"></i>
             </button>
-            <button onclick="enviarTexto()" title="Enviar" aria-label="Enviar mensagem">
+            <button id="btn-enviar" onclick="enviarTexto()" title="Enviar" aria-label="Enviar mensagem">
               <i class="mdi mdi-send" aria-hidden="true"></i>
             </button>
           </div>
@@ -303,6 +321,7 @@
 
   <div id="modal-root"></div>
 
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/js/app.js"></script>
 </body>

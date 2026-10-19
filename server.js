@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { init, loadDB, saveDB } = require('./db');
 
 const app = express();
@@ -106,7 +107,7 @@ function getClientIp(req) {
 
 function publicUser(u) {
   return {
-    id: u.id, username: u.username, email: u.email, photoUrl: u.photoUrl || null,
+    id: u.id, username: u.username, email: u.email, contactNumber: u.contactNumber || null, photoUrl: u.photoUrl || null,
     bio: u.bio || '', phone: u.phone || '', ringColor: u.ringColor || '#ffb454',
     socials: Array.isArray(u.socials) ? u.socials : []
   };
@@ -219,8 +220,13 @@ function emitirMensagemSistemaPersonalizada(db, membros, msg) {
   });
 }
 
+// dono ATUAL do grupo. createdBy continua sendo só "quem criou" (aparece na descrição).
+// Quando o dono sai, ownerId vira null; se ele voltar depois, volta como membro comum.
+function donoDe(chat) {
+  return chat.ownerId !== undefined ? chat.ownerId : chat.createdBy;
+}
 function souDono(chat, userId) {
-  return chat.createdBy === userId;
+  return !!userId && donoDe(chat) === userId;
 }
 function souAdminDoGrupo(chat, userId) {
   return souDono(chat, userId) || (chat.admins || []).includes(userId);
@@ -272,59 +278,179 @@ function fotoParaViewer(db, ownerUser, viewerId) {
   return fotoVisivelPara(db, ownerUser, viewerId) ? (ownerUser.photoUrl || null) : null;
 }
 
-// ---------- Cadastro ----------
-app.post('/api/register', async (req, res) => {
-  const { username, email, password } = req.body;
-  if (!username || !email || !password) {
-    return res.status(400).json({ error: 'Preencha usuário, email e senha' });
+// ---------- Autenticação: email verificado + Google ----------
+function novoNumeroContato(db) {
+  let n;
+  do { n = String(Math.floor(1000000 + Math.random() * 9000000)); }
+  while (db.users.some(u => u.contactNumber === n) || Object.values(db.pendingVerifications || {}).some(u => u.contactNumber === n));
+  return n;
+}
+function codigoHash(email, code) { return crypto.createHash('sha256').update(`${email.toLowerCase()}:${code}:${process.env.AUTH_CODE_SECRET || 'configure-um-segredo-no-railway'}`).digest('hex'); }
+async function enviarEmailVerificacao(email, code, token, req) {
+  if (!process.env.RESEND_API_KEY || !process.env.EMAIL_FROM) throw new Error('Email não configurado. Configure RESEND_API_KEY e EMAIL_FROM no Railway.');
+  const base = (process.env.APP_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  const link = `${base}/api/verify-email?token=${encodeURIComponent(token)}`;
+  const html = `<!doctype html><html><head><style>@keyframes cdPulse{0%,100%{transform:scale(1);box-shadow:0 0 0 rgba(199,243,107,0)}50%{transform:scale(1.025);box-shadow:0 0 24px rgba(199,243,107,.16)}}.cd-pulse{animation:cdPulse 2.8s ease-in-out infinite}</style></head><body style="margin:0;background:#0b0d12;color:#f5f6f8;font-family:Arial,sans-serif;padding:28px 12px"><div style="max-width:560px;margin:auto;background:linear-gradient(145deg,#171b24,#101218);border:1px solid #2b303b;border-radius:24px;overflow:hidden"><div style="height:5px;background:linear-gradient(90deg,#c7f36b,#72e4bd,#a6a1ff)"></div><div style="padding:34px 30px"><div style="font-size:13px;letter-spacing:3px;color:#c7f36b;font-weight:bold">✳ CHATDEVS</div><h1 style="font-size:30px;line-height:1.15;margin:24px 0 12px">Só falta confirmar<br>seu email<span style="color:#c7f36b">.</span></h1><p style="color:#b7bdc9;line-height:1.7">Use o código abaixo para ativar sua conta. Ele expira em 15 minutos.</p><div class="cd-pulse" style="letter-spacing:12px;font-size:34px;font-weight:800;background:#0b0d12;border:1px solid #343b47;border-radius:16px;padding:22px 10px;text-align:center;margin:24px 0;color:#c7f36b">${code}</div><p style="text-align:center;color:#aeb5c3;font-size:13px">Ou confirme com um toque:</p><div style="text-align:center;margin:20px 0 28px"><a href="${link}" style="display:inline-block;background:#c7f36b;color:#11150b;text-decoration:none;font-weight:800;padding:16px 24px;border-radius:12px">Verificar meu email →</a></div><div style="border-top:1px solid #2b303b;padding-top:18px;color:#818a9b;font-size:12px;line-height:1.6">Se você não criou uma conta no ChatDevs, ignore esta mensagem. Não compartilhe este código com ninguém.</div></div></div></body></html>`;
+  const response = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: process.env.EMAIL_FROM, to: [email], subject: 'Seu código de verificação — ChatDevs', html, text: `Seu código ChatDevs é ${code}. Expira em 15 minutos. Verifique também por este link: ${link}` }) });
+  if (!response.ok) { const detail = await response.text(); console.error('[email] Resend:', detail); throw new Error('Não foi possível enviar o email. Confira o domínio e as credenciais de email.'); }
+}
+function finalizarCadastroPendente(db, pending) {
+  // Contas existentes são atualizadas no lugar; nenhuma conta é duplicada.
+  let user = pending.existingUserId ? db.users.find(u => u.id === pending.existingUserId) : null;
+  if (user) {
+    user.emailVerified = true;
+    user.emailCodeVerified = true;
+    if (pending.authProvider === 'google') user.googleEmailCodeVerified = true;
+    user.contactNumber = user.contactNumber || pending.contactNumber || novoNumeroContato(db);
+    user.photoUrl = user.photoUrl || pending.photoUrl || null;
+    user.authProvider = user.authProvider || pending.authProvider || 'email';
+  } else {
+    user = {
+      id: uuidv4(), username: pending.username, email: pending.email,
+      passwordHash: pending.passwordHash || null,
+      contactNumber: pending.contactNumber || novoNumeroContato(db),
+      createdIp: pending.createdIp || '', createdAt: Date.now(),
+      emailVerified: true, emailCodeVerified: true,
+      authProvider: pending.authProvider || 'email',
+      photoUrl: pending.photoUrl || null,
+      ...(pending.authProvider === 'google' ? { googleEmailCodeVerified: true } : {})
+    };
+    db.users.push(user);
   }
-  const db = loadDB();
-  const ip = getClientIp(req);
-
-  const jaExiste = db.users.some(
-    u => u.email.toLowerCase() === email.toLowerCase() ||
-         u.username.toLowerCase() === username.toLowerCase()
-  );
-  if (jaExiste) {
-    return res.status(409).json({ error: 'Email ou usuário já cadastrado' });
-  }
-
-  const contasNesseIp = db.ipCounts[ip] || 0;
-  if (contasNesseIp >= MAX_CONTAS_POR_IP) {
-    return res.status(403).json({ error: 'Limite de 3 contas por IP atingido' });
-  }
-
-  const passwordHash = await bcrypt.hash(password, 10);
-  const user = {
-    id: uuidv4(),
-    username,
-    email,
-    passwordHash,
-    createdIp: ip,
-    createdAt: Date.now()
-  };
-  db.users.push(user);
-  db.ipCounts[ip] = contasNesseIp + 1;
+  delete db.pendingVerifications[pending.email.toLowerCase()];
   saveDB(db);
+  return user;
+}
+app.get('/api/auth-config', (req, res) => res.json({ googleClientId: process.env.GOOGLE_CLIENT_ID || '' }));
+app.post('/api/register', async (req, res) => {
+  try {
+    const username = String(req.body.username || '').trim();
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    if (username.length < 3 || username.length > 24 || !/^[\p{L}\p{N}_.-]+$/u.test(username)) return res.status(400).json({ error: 'Use um nome de usuário de 3 a 24 caracteres (letras, números, ponto, hífen ou _).' });
+    if (!/^\S+@\S+\.\S+$/.test(email)) return res.status(400).json({ error: 'Informe um email válido.' });
+    if (password.length < 8) return res.status(400).json({ error: 'A senha precisa ter pelo menos 8 caracteres.' });
+    const db = loadDB();
+    if (db.users.some(u => u.email.toLowerCase() === email || u.username.toLowerCase() === username.toLowerCase())) return res.status(409).json({ error: 'Email ou usuário já cadastrado.' });
+    const ip = getClientIp(req); const contasNesseIp = db.ipCounts[ip] || 0;
+    if (contasNesseIp >= MAX_CONTAS_POR_IP) return res.status(403).json({ error: 'Limite de 3 contas por IP atingido.' });
+    const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0'); const token = crypto.randomBytes(32).toString('hex');
+    const pending = { username, email, passwordHash: await bcrypt.hash(password, 12), createdIp: ip, contactNumber: novoNumeroContato(db), codeHash: codigoHash(email, code), tokenHash: crypto.createHash('sha256').update(token).digest('hex'), expiresAt: Date.now() + 15 * 60 * 1000, authProvider: 'email' };
+    db.pendingVerifications[email] = pending; saveDB(db);
+    try { await enviarEmailVerificacao(email, code, token, req); } catch (e) { delete db.pendingVerifications[email]; saveDB(db); return res.status(503).json({ error: e.message }); }
+    res.json({ verificationRequired: true, email });
+  } catch (e) { console.error('[register]', e); res.status(500).json({ error: 'Não foi possível iniciar o cadastro agora.' }); }
+});
+app.post('/api/verify-email-code', (req, res) => {
+  const email = String(req.body.email || '').trim().toLowerCase(); const code = String(req.body.code || '').trim(); const db = loadDB(); const pending = db.pendingVerifications[email];
+  if (!pending || pending.expiresAt < Date.now()) { if (pending) { delete db.pendingVerifications[email]; saveDB(db); } return res.status(400).json({ error: 'Código expirado. Faça o cadastro novamente.' }); }
+  if (!/^\d{6}$/.test(code) || codigoHash(email, code) !== pending.codeHash) return res.status(400).json({ error: 'Código incorreto. Confira os seis dígitos e tente novamente.' });
+  if (!pending.existingUserId) { const ip = pending.createdIp; db.ipCounts[ip] = (db.ipCounts[ip] || 0) + 1; } const user = finalizarCadastroPendente(db, pending); res.json({ user: publicUser(user) });
+});
+app.get('/api/verify-email', (req, res) => {
+  const token = String(req.query.token || ''); const tokenHash = crypto.createHash('sha256').update(token).digest('hex'); const db = loadDB();
+  const entry = Object.entries(db.pendingVerifications || {}).find(([, p]) => p.tokenHash === tokenHash);
+  if (!entry || entry[1].expiresAt < Date.now()) return res.status(400).send('<meta name="viewport" content="width=device-width"><body style="font-family:Arial;background:#101218;color:white;padding:40px;text-align:center"><h1>Link expirado</h1><p>Volte ao ChatDevs e faça o cadastro novamente.</p></body>');
+  const [email, pending] = entry; if (!pending.existingUserId) db.ipCounts[pending.createdIp] = (db.ipCounts[pending.createdIp] || 0) + 1; finalizarCadastroPendente(db, pending);
+  res.send(`<!doctype html><meta name="viewport" content="width=device-width"><title>Email verificado</title><body style="font-family:Arial;background:#101218;color:#f5f6f8;display:grid;place-items:center;min-height:90vh;text-align:center"><div style="padding:32px;border:1px solid #343b47;border-radius:24px;max-width:420px"><div style="font-size:48px;color:#c7f36b">✓</div><h1>Email verificado!</h1><p style="color:#b7bdc9">Sua conta ChatDevs está ativa. Volte ao aplicativo e entre com seu email e senha.</p><a style="display:inline-block;background:#c7f36b;color:#111;text-decoration:none;padding:14px 22px;border-radius:12px;font-weight:bold" href="/">Voltar ao ChatDevs</a></div></body>`);
+});
+app.post('/api/google-login', async (req, res) => {
+  try {
+    if (!process.env.GOOGLE_CLIENT_ID) return res.status(503).json({ error: 'Login Google ainda não foi configurado pelo administrador.' });
+    const credential = String(req.body.credential || '');
+    if (!credential) return res.status(400).json({ error: 'Credencial Google ausente.' });
+    const verify = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
+    const payload = await verify.json();
+    if (!verify.ok || payload.aud !== process.env.GOOGLE_CLIENT_ID || payload.email_verified !== 'true' || !payload.email) return res.status(401).json({ error: 'Não foi possível validar sua conta Google.' });
 
+    const db = loadDB();
+    if (!db.pendingVerifications) db.pendingVerifications = {};
+    const email = String(payload.email).toLowerCase();
+    let user = db.users.find(u => u.email.toLowerCase() === email);
+    if (user && user.bloqueadoAdmin) return res.status(403).json({ error: 'Sua conta foi suspensa. Entre em contato com o suporte.' });
+
+    // Todas as contas, inclusive as antigas, precisam concluir a verificação por código uma vez.
+    if (user && user.emailCodeVerified === true) {
+      user.contactNumber = user.contactNumber || novoNumeroContato(db);
+      user.emailVerified = true;
+      user.photoUrl = user.photoUrl || payload.picture || null;
+      saveDB(db);
+      return res.json({ user: publicUser(user) });
+    }
+
+    const ip = getClientIp(req);
+    const usernameFromGoogle = String(payload.name || email.split('@')[0]).normalize('NFKD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-zA-Z0-9_.-]/g, '').slice(0, 20) || 'usuario';
+    let username = user ? user.username : usernameFromGoogle;
+    if (!user) {
+      const base = username; let i = 1;
+      while (db.users.some(u => u.username.toLowerCase() === username.toLowerCase()) || Object.values(db.pendingVerifications).some(p => (p.username || '').toLowerCase() === username.toLowerCase() && p.email !== email)) username = `${base.slice(0, 18)}${i++}`;
+    }
+    const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+    const token = crypto.randomBytes(32).toString('hex');
+    const pending = {
+      username, email, passwordHash: user ? user.passwordHash || null : null,
+      createdIp: user ? (user.createdIp || ip) : ip,
+      contactNumber: user?.contactNumber || novoNumeroContato(db),
+      photoUrl: user?.photoUrl || payload.picture || null,
+      existingUserId: user?.id || null,
+      codeHash: codigoHash(email, code),
+      tokenHash: crypto.createHash('sha256').update(token).digest('hex'),
+      expiresAt: Date.now() + 15 * 60 * 1000, authProvider: 'google'
+    };
+    db.pendingVerifications[email] = pending;
+    saveDB(db);
+    try {
+      await enviarEmailVerificacao(email, code, token, req);
+    } catch (e) {
+      delete db.pendingVerifications[email]; saveDB(db);
+      console.error('[google-login-email]', e.message);
+      return res.status(503).json({ error: 'O Google foi validado, mas não conseguimos enviar o código. Confira o Resend e tente novamente.' });
+    }
+    res.json({ verificationRequired: true, email });
+  } catch (e) {
+    console.error('[google-login]', e);
+    res.status(500).json({ error: 'Falha ao entrar com Google. Tente novamente.' });
+  }
+});
+app.post('/api/login', async (req, res) => {
+  const { emailOrUsername, password } = req.body; const db = loadDB(); const user = findUserByEmailOrUsername(db, String(emailOrUsername || ''));
+  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
+  if (!user.passwordHash) return res.status(401).json({ error: 'Esta conta usa Google. Entre pelo botão Continuar com Google.' });
+  const ok = await bcrypt.compare(String(password || ''), user.passwordHash);
+  if (!ok) return res.status(401).json({ error: 'Senha incorreta' });
+  if (user.bloqueadoAdmin) return res.status(403).json({ error: 'Sua conta foi suspensa. Entre em contato com o suporte.' });
+  if (user.emailCodeVerified !== true) {
+    try {
+      if (!db.pendingVerifications) db.pendingVerifications = {};
+      const email = String(user.email).toLowerCase();
+      const code = String(crypto.randomInt(0, 1000000)).padStart(6, '0');
+      const token = crypto.randomBytes(32).toString('hex');
+      const pending = {
+        username: user.username, email, passwordHash: user.passwordHash || null,
+        createdIp: user.createdIp || getClientIp(req), contactNumber: user.contactNumber || novoNumeroContato(db),
+        photoUrl: user.photoUrl || null, existingUserId: user.id,
+        codeHash: codigoHash(email, code),
+        tokenHash: crypto.createHash('sha256').update(token).digest('hex'),
+        expiresAt: Date.now() + 15 * 60 * 1000, authProvider: user.authProvider || 'email'
+      };
+      db.pendingVerifications[email] = pending;
+      saveDB(db);
+      await enviarEmailVerificacao(email, code, token, req);
+      return res.json({ verificationRequired: true, email });
+    } catch (e) {
+      console.error('[login-email-verification]', e.message);
+      return res.status(503).json({ error: 'Precisamos verificar seu email antes de entrar, mas não foi possível enviar o código. Confira o Resend e tente novamente.' });
+    }
+  }
+  if (!user.emailVerified) return res.status(403).json({ error: 'Seu email ainda não foi verificado.' });
   res.json({ user: publicUser(user) });
 });
 
-// ---------- Login ----------
-app.post('/api/login', async (req, res) => {
-  const { emailOrUsername, password } = req.body;
-  const db = loadDB();
-  const user = findUserByEmailOrUsername(db, emailOrUsername || '');
-  if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
-
-  const ok = await bcrypt.compare(password, user.passwordHash);
-  if (!ok) return res.status(401).json({ error: 'Senha incorreta' });
-
-  if (user.bloqueadoAdmin) {
-    return res.status(403).json({ error: 'Sua conta foi suspensa. Entre em contato com o suporte.' });
-  }
-
-  res.json({ user: publicUser(user) });
+// Busca pública por número de contato de 7 dígitos.
+app.get('/api/users/search', (req, res) => {
+  const q = String(req.query.q || '').trim(); if (!/^\d{7}$/.test(q)) return res.status(400).json({ error: 'Digite o número de contato com 7 dígitos.' });
+  const user = loadDB().users.find(u => u.contactNumber === q); if (!user) return res.status(404).json({ error: 'Nenhum perfil encontrado com esse número.' });
+  res.json({ user: { id: user.id, username: user.username, contactNumber: user.contactNumber, photoUrl: user.photoUrl || null, bio: user.bio || '' } });
 });
 
 // ---------- Trocar ou remover a própria foto de perfil ----------
@@ -348,10 +474,11 @@ app.post('/api/users/:userId/profile', (req, res) => {
   const user = db.users.find(u => u.id === userId);
   if (!user) return res.status(404).json({ error: 'Usuário não encontrado' });
   const bio = String(req.body.bio || '').trim().slice(0, 240);
+  const phoneProvided = Object.prototype.hasOwnProperty.call(req.body, 'phone');
   const phone = String(req.body.phone || '').trim().slice(0, 30);
   const ringColor = /^#[0-9a-fA-F]{6}$/.test(String(req.body.ringColor || '')) ? req.body.ringColor : '#ffb454';
   user.bio = bio;
-  user.phone = phone;
+  if (phoneProvided) user.phone = phone;
   user.ringColor = ringColor;
   user.socials = normalizarSocials(req.body.socials);
   saveDB(db);
@@ -419,6 +546,7 @@ app.get('/api/users/:userId/public', (req, res) => {
   res.json({
     id: user.id,
     username: user.username,
+    contactNumber: user.contactNumber || null,
     photoUrl: fotoParaViewer(db, user, viewerId),
     bio: user.bio || '',
     phone: user.phone || '',
@@ -654,6 +782,23 @@ app.post('/api/chats/:chatId/delete', (req, res) => {
   const chat = db.chats.find(c => c.id === chatId);
   if (!chat) return res.status(404).json({ error: 'Conversa não encontrada' });
 
+  if (chat.type === 'private' && chat.members.includes(userId)) {
+    const eAutoConversa = chat.members.every(m => m === userId);
+    if (!eAutoConversa) {
+      // PV: apagar é pessoal. Só some pra quem apagou (e o histórico antigo some pra ele);
+      // a outra pessoa continua com a conversa. Se os dois apagarem, aí sim limpa tudo.
+      if (!chat.hiddenAt) chat.hiddenAt = {};
+      chat.hiddenAt[userId] = Date.now();
+      if (chat.members.every(m => chat.hiddenAt[m])) {
+        apagarArquivosDoChat(db, chatId);
+        db.messages = db.messages.filter(m => m.chatId !== chatId);
+        db.chats = db.chats.filter(c => c.id !== chatId);
+      }
+      saveDB(db);
+      return res.json({ ok: true });
+    }
+  }
+
   if (chat.members.includes(userId)) {
     // membro de verdade: apaga a conversa inteira, pra todo mundo (comportamento de sempre)
     apagarArquivosDoChat(db, chatId);
@@ -687,6 +832,7 @@ app.post('/api/chats/:chatId/leave', (req, res) => {
     return res.status(400).json({ error: 'Você não está nesse grupo' });
   }
 
+  let novoAdminMsg = null;
   const quemSaiu = db.users.find(u => u.id === userId);
   const msg = criarMensagemSistema(
     chatId,
@@ -697,8 +843,24 @@ app.post('/api/chats/:chatId/leave', (req, res) => {
   // quem ainda vai ficar no grupo + quem tá saindo (pra ele ver a própria msg de saída antes de virar fantasma)
   const destinatarios = chat.members.slice();
 
+  const eraDono = souDono(chat, userId);
   chat.members = chat.members.filter(m => m !== userId);
   if (chat.admins) chat.admins = chat.admins.filter(a => a !== userId);
+  if (eraDono) {
+    // o dono saiu: o grupo fica sem dono (quem criou continua registrado em createdBy).
+    // Se não sobrou nenhum admin, um membro aleatório vira admin pro grupo não ficar sem ninguém.
+    chat.ownerId = null;
+    if (chat.members.length && !(chat.admins || []).length) {
+      const sorteado = chat.members[Math.floor(Math.random() * chat.members.length)];
+      chat.admins = [sorteado];
+      const alvo = db.users.find(u => u.id === sorteado);
+      novoAdminMsg = criarMensagemSistema(
+        chatId,
+        `${alvo ? alvo.username : 'Alguém'} agora é admin do grupo`,
+        { kind: 'promote', actorId: sorteado, targetId: sorteado }
+      );
+    }
+  }
 
   // mesma regra de quando é removido: continua vendo o histórico até agora
   // (modo fantasma), só não recebe mensagem nova nem consegue mandar
@@ -707,6 +869,7 @@ app.post('/api/chats/:chatId/leave', (req, res) => {
   chat.removedMembers.push({ userId, removedAt: Date.now() });
 
   db.messages.push(msg);
+  if (novoAdminMsg) db.messages.push(novoAdminMsg);
 
   if (chat.members.length === 0) {
     apagarArquivosDoChat(db, chatId);
@@ -716,6 +879,7 @@ app.post('/api/chats/:chatId/leave', (req, res) => {
 
   saveDB(db);
   emitirMensagemSistemaPersonalizada(db, destinatarios, msg);
+  if (novoAdminMsg) emitirMensagemSistemaPersonalizada(db, chat.members, novoAdminMsg);
   res.json({ ok: true });
 });
 
@@ -736,7 +900,7 @@ app.get('/api/chats/:chatId/members', (req, res) => {
       username: u ? u.username : 'Usuário removido',
       email: u ? u.email : null,
       photoUrl: u ? fotoParaViewer(db, u, userId) : null,
-      isOwner: id === chat.createdBy,
+      isOwner: id === donoDe(chat),
       isAdmin: admins.includes(id)
     };
   });
@@ -915,7 +1079,7 @@ app.post('/api/invite/:code/join', (req, res) => {
     saveDB(db);
 
     const solicitante = db.users.find(u => u.id === userId);
-    const admins = chat.admins.includes(chat.createdBy) ? chat.admins : [chat.createdBy, ...chat.admins];
+    const admins = [donoDe(chat), ...(chat.admins || [])].filter(Boolean);
     admins.forEach(adminId => {
       io.to('user:' + adminId).emit('solicitacao_entrada', {
         chatId: chat.id,
@@ -1126,6 +1290,22 @@ app.post('/api/chats/:chatId/promote', (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- Tirar admin (só o dono do grupo pode) ----------
+app.post('/api/chats/:chatId/demote', (req, res) => {
+  const { chatId } = req.params;
+  const { userId, targetUserId } = req.body;
+  const db = loadDB();
+  const chat = db.chats.find(c => c.id === chatId);
+  if (!chat || chat.type !== 'group') return res.status(404).json({ error: 'Grupo não encontrado' });
+  if (!souDono(chat, userId)) return res.status(403).json({ error: 'Só o dono do grupo pode tirar admin' });
+  if (targetUserId === donoDe(chat)) return res.status(400).json({ error: 'O dono não pode perder o cargo' });
+  if (!(chat.admins || []).includes(targetUserId)) return res.json({ ok: true });
+
+  chat.admins = chat.admins.filter(a => a !== targetUserId);
+  saveDB(db);
+  res.json({ ok: true });
+});
+
 // ---------- Remover pessoa do grupo (dono ou admins podem) ----------
 app.post('/api/chats/:chatId/remove-member', (req, res) => {
   const { chatId } = req.params;
@@ -1134,7 +1314,7 @@ app.post('/api/chats/:chatId/remove-member', (req, res) => {
   const chat = db.chats.find(c => c.id === chatId);
   if (!chat || chat.type !== 'group') return res.status(404).json({ error: 'Grupo não encontrado' });
   if (!souAdminDoGrupo(chat, userId)) return res.status(403).json({ error: 'Só o dono ou admins podem remover pessoas' });
-  if (targetUserId === chat.createdBy) return res.status(403).json({ error: 'Não é possível remover o dono do grupo' });
+  if (targetUserId === donoDe(chat)) return res.status(403).json({ error: 'Não é possível remover o dono do grupo' });
   if (!chat.members.includes(targetUserId)) return res.status(400).json({ error: 'Essa pessoa não está no grupo' });
 
   const alvo = db.users.find(u => u.id === targetUserId);
@@ -1209,11 +1389,80 @@ app.get('/api/blocks', (req, res) => {
   res.json({ bloqueados });
 });
 
+// ---------- Reações, mensagens fixadas e conversas arquivadas ----------
+const EMOJIS_REACAO_PERMITIDOS = new Set(['👍','❤️','😂','😮','😢','🙏','🔥','👏']);
+
+app.post('/api/chats/:chatId/archive', (req, res) => {
+  const { chatId } = req.params;
+  const { userId, archived } = req.body || {};
+  if (!userId) return res.status(400).json({ error: 'Informe o usuário.' });
+  const db = loadDB();
+  const chat = db.chats.find(c => c.id === chatId);
+  if (!chat || (!chat.members.includes(userId) && !(chat.removedMembers || []).some(r => r.userId === userId))) {
+    return res.status(404).json({ error: 'Conversa não encontrada.' });
+  }
+  if (!Array.isArray(chat.archivedBy)) chat.archivedBy = [];
+  if (archived) {
+    if (!chat.archivedBy.includes(userId)) chat.archivedBy.push(userId);
+  } else {
+    chat.archivedBy = chat.archivedBy.filter(id => id !== userId);
+  }
+  saveDB(db);
+  res.json({ ok: true, archived: !!archived });
+});
+
+app.post('/api/chats/:chatId/pin', (req, res) => {
+  const { chatId } = req.params;
+  const { userId, messageId } = req.body || {};
+  if (!userId || !messageId) return res.status(400).json({ error: 'Dados incompletos.' });
+  const db = loadDB();
+  const chat = db.chats.find(c => c.id === chatId);
+  if (!chat || !chat.members.includes(userId)) return res.status(404).json({ error: 'Conversa não encontrada.' });
+  const msg = db.messages.find(m => m.id === messageId && m.chatId === chatId && !m.deleted && m.type !== 'system');
+  if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada.' });
+  const pinned = chat.pinnedMessageId !== messageId;
+  chat.pinnedMessageId = pinned ? messageId : null;
+  saveDB(db);
+  io.to('chat:' + chatId).emit('message_pin_updated', { chatId, messageId, pinned });
+  res.json({ ok: true, pinned, messageId });
+});
+
+app.post('/api/messages/:messageId/reaction', (req, res) => {
+  const { messageId } = req.params;
+  const { userId, emoji } = req.body || {};
+  if (!userId || !EMOJIS_REACAO_PERMITIDOS.has(emoji)) return res.status(400).json({ error: 'Reação inválida.' });
+  const db = loadDB();
+  const msg = db.messages.find(m => m.id === messageId && !m.deleted && m.type !== 'system');
+  if (!msg) return res.status(404).json({ error: 'Mensagem não encontrada.' });
+  const chat = db.chats.find(c => c.id === msg.chatId);
+  if (!chat || !chat.members.includes(userId)) return res.status(403).json({ error: 'Sem acesso a essa conversa.' });
+  if (!Array.isArray(msg.reactions)) msg.reactions = [];
+  const existing = msg.reactions.find(r => r.userId === userId);
+  if (existing && existing.emoji === emoji) {
+    msg.reactions = msg.reactions.filter(r => r.userId !== userId);
+  } else if (existing) {
+    existing.emoji = emoji;
+    existing.updatedAt = Date.now();
+  } else {
+    msg.reactions.push({ userId, emoji, updatedAt: Date.now() });
+  }
+  saveDB(db);
+  const payload = { chatId: msg.chatId, messageId, reactions: msg.reactions };
+  io.to('chat:' + msg.chatId).emit('message_reactions_updated', payload);
+  res.json({ ok: true, reactions: msg.reactions });
+});
+
 app.get('/api/chats', (req, res) => {
-  const { userId } = req.query;
+  const { userId, view } = req.query;
   const db = loadDB();
 
   const chats = db.chats.filter(c => {
+    const isArchived = Array.isArray(c.archivedBy) && c.archivedBy.includes(userId);
+    if ((view === 'archived') !== isArchived) return false;
+    if (c.type === 'private' && c.hiddenAt && c.hiddenAt[userId]) {
+      // apaguei essa conversa: só volta pra lista se chegou mensagem depois disso
+      return db.messages.some(m => m.chatId === c.id && m.createdAt > c.hiddenAt[userId]);
+    }
     if (c.members.includes(userId)) return true;
     // grupo do qual a pessoa foi removida: continua na lista, em modo fantasma
     return (c.removedMembers || []).some(r => r.userId === userId);
@@ -1250,7 +1499,9 @@ app.get('/api/chats', (req, res) => {
     }
 
     // em modo fantasma, só enxerga (e só conta) mensagens de até o momento da remoção
-    const jaEntrouEm = c.type === 'group' ? ((c.memberJoinedAt && c.memberJoinedAt[userId]) || 0) : 0;
+    const jaEntrouEm = c.type === 'group'
+      ? ((c.memberJoinedAt && c.memberJoinedAt[userId]) || 0)
+      : ((c.hiddenAt && c.hiddenAt[userId]) || 0);
     const msgsDoChat = db.messages.filter(m =>
       m.chatId === c.id
       && (!removidoDoGrupo || m.createdAt <= registroRemocao.removedAt)
@@ -1272,7 +1523,10 @@ app.get('/api/chats', (req, res) => {
       otherEmail,
       ehAutoConversa,
       removidoDoGrupo,
+      archived: Array.isArray(c.archivedBy) && c.archivedBy.includes(userId),
+      pinnedMessageId: c.pinnedMessageId || null,
       lastMessage: ultima ? (ultima.deleted ? 'Mensagem apagada' : ultima.content) : null,
+      lastMessageAt: ultima ? ultima.createdAt : null,
       unreadCount
     };
   });
@@ -1315,17 +1569,20 @@ app.get('/api/chats/:chatId/messages', (req, res) => {
       if (m.chatId !== chatId) return false;
       if (!souMembro && m.createdAt > registroRemocao.removedAt) return false;
       // quem entrou no grupo depois não vê mensagens de antes de ter entrado
-      const jaEntrouEm = chat.type === 'group' ? ((chat.memberJoinedAt && chat.memberJoinedAt[userId]) || 0) : 0;
+      const jaEntrouEm = chat.type === 'group'
+        ? ((chat.memberJoinedAt && chat.memberJoinedAt[userId]) || 0)
+        : ((chat.hiddenAt && chat.hiddenAt[userId]) || 0);
       return m.createdAt >= jaEntrouEm;
     })
     .map(m => personalizarMensagem(m, userId, db))
     .map(m => {
-      if (!m.senderId) return m;
-      const remetente = db.users.find(u => u.id === m.senderId);
+      const remetente = m.senderId ? db.users.find(u => u.id === m.senderId) : null;
       return Object.assign({}, m, {
-        senderUsername: remetente ? remetente.username : 'Usuário removido',
+        reactions: Array.isArray(m.reactions) ? m.reactions : [],
+        pinned: chat.pinnedMessageId === m.id,
+        senderUsername: remetente ? remetente.username : (m.senderId ? 'Usuário removido' : m.senderUsername),
         senderPhotoUrl: remetente ? fotoParaViewer(db, remetente, userId) : null,
-        senderSaiuDoGrupo: chat.type === 'group' && !chat.members.includes(m.senderId)
+        senderSaiuDoGrupo: !!(m.senderId && chat.type === 'group' && !chat.members.includes(m.senderId))
       });
     });
   res.json({ messages: mensagens });
@@ -1378,7 +1635,8 @@ io.on('connection', socket => {
       replyTo: replyTo || null,
       createdAt: Date.now(),
       editedAt: null,
-      deleted: false
+      deleted: false,
+      reactions: []
     };
     db.messages.push(message);
     saveDB(db);
@@ -1615,6 +1873,14 @@ app.get('/api/admin/buscar-usuario', (req, res) => {
 
 init()
   .then(() => {
+    const db = loadDB(); let changed = false;
+    for (const u of db.users) {
+      // Contas antigas já existentes não devem perder acesso por causa da nova etapa de verificação.
+      if (u.emailVerified === undefined) { u.emailVerified = true; changed = true; }
+      if (!u.contactNumber) { u.contactNumber = novoNumeroContato(db); changed = true; }
+    }
+    if (!db.pendingVerifications) { db.pendingVerifications = {}; changed = true; }
+    if (changed) saveDB(db);
     server.listen(PORT, () => {
       console.log(`Servidor rodando em http://localhost:${PORT}`);
     });
