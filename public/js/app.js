@@ -377,43 +377,66 @@ function filtrarConversas(tipo) {
 }
 
 // ---------- Auth ----------
+let emailPendenteVerificacao = '';
 async function fazerCadastro() {
   const username = document.getElementById('reg-username').value.trim();
   const email = document.getElementById('reg-email').value.trim();
   const password = document.getElementById('reg-pass').value;
-  const erroEl = document.getElementById('reg-erro');
-  erroEl.textContent = '';
-
-  const resp = await fetch('/api/register', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, email, password })
-  });
-  const data = await resp.json();
-  if (!resp.ok) { erroEl.textContent = data.error; return; }
-
-  usuarioAtual = data.user;
-  salvarConta(usuarioAtual);
-  entrarNoChat();
+  const erroEl = document.getElementById('reg-erro'); erroEl.textContent = '';
+  try {
+    const resp = await fetch('/api/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, email, password }) });
+    const data = await resp.json();
+    if (!resp.ok) { erroEl.textContent = data.error || 'Não foi possível criar a conta.'; return; }
+    emailPendenteVerificacao = data.email || email;
+    document.getElementById('verify-email-label').textContent = emailPendenteVerificacao;
+    document.getElementById('verify-code').value = ''; document.getElementById('verify-erro').textContent = '';
+    mostrarTela('verificacao');
+  } catch (e) { erroEl.textContent = 'Falha de conexão. Tente novamente.'; }
+}
+async function verificarCodigoEmail() {
+  const code = document.getElementById('verify-code').value.trim(); const erro = document.getElementById('verify-erro'); erro.textContent = '';
+  try {
+    const resp = await fetch('/api/verify-email-code', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: emailPendenteVerificacao, code }) });
+    const data = await resp.json(); if (!resp.ok) { erro.textContent = data.error || 'Código inválido.'; return; }
+    usuarioAtual = data.user; salvarConta(usuarioAtual); entrarNoChat();
+  } catch (e) { erro.textContent = 'Falha de conexão. Tente novamente.'; }
+}
+async function entrarComGoogle() {
+  try {
+    const cfgResp = await fetch('/api/auth-config'); const cfg = await cfgResp.json();
+    if (!cfg.googleClientId) { alert('O login Google ainda precisa ser configurado pelo administrador. Veja o passo a passo de credenciais.'); return; }
+    if (!window.google || !google.accounts || !google.accounts.id) { alert('O Google ainda está carregando. Tente novamente em alguns segundos.'); return; }
+    google.accounts.id.initialize({ client_id: cfg.googleClientId, callback: async response => {
+      try {
+        const r = await fetch('/api/google-login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential: response.credential }) });
+        const d = await r.json(); if (!r.ok) { alert(d.error || 'Não foi possível entrar com Google.'); return; }
+        usuarioAtual = d.user; salvarConta(usuarioAtual); entrarNoChat();
+      } catch (e) { alert('Falha de conexão ao entrar com Google.'); }
+    } });
+    google.accounts.id.prompt();
+  } catch (e) { alert('Não foi possível iniciar o login Google.'); }
+}
+async function fazerLogin() {
+  const emailOrUsername = document.getElementById('login-user').value.trim(); const password = document.getElementById('login-pass').value;
+  const erroEl = document.getElementById('login-erro'); erroEl.textContent = '';
+  try {
+    const resp = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emailOrUsername, password }) });
+    const data = await resp.json(); if (!resp.ok) { erroEl.textContent = data.error || 'Não foi possível entrar.'; return; }
+    usuarioAtual = data.user; salvarConta(usuarioAtual); entrarNoChat();
+  } catch (e) { erroEl.textContent = 'Falha de conexão. Tente novamente.'; }
 }
 
-async function fazerLogin() {
-  const emailOrUsername = document.getElementById('login-user').value.trim();
-  const password = document.getElementById('login-pass').value;
-  const erroEl = document.getElementById('login-erro');
-  erroEl.textContent = '';
-
-  const resp = await fetch('/api/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ emailOrUsername, password })
-  });
-  const data = await resp.json();
-  if (!resp.ok) { erroEl.textContent = data.error; return; }
-
-  usuarioAtual = data.user;
-  salvarConta(usuarioAtual);
-  entrarNoChat();
+async function buscarPerfilPorNumero() {
+  const numero = prompt('Digite o número de contato de 7 dígitos:');
+  if (numero === null) return;
+  const q = numero.trim();
+  if (!/^\d{7}$/.test(q)) { mostrarAviso('O número precisa ter exatamente 7 dígitos.'); return; }
+  try {
+    const resp = await fetch('/api/users/search?q=' + encodeURIComponent(q)); const data = await resp.json();
+    if (!resp.ok) { mostrarAviso(data.error || 'Perfil não encontrado.'); return; }
+    if (data.user.id === usuarioAtual.id) { abrirEditarPerfil(); return; }
+    await abrirPerfilUsuario(data.user.id);
+  } catch (e) { mostrarAviso('Não foi possível buscar esse perfil agora.'); }
 }
 
 function sair() {
@@ -435,7 +458,19 @@ function entrarNoChat() {
   aplicarConfig(carregarConfig());
 
   socket = io();
-  socket.emit('join', { userId: usuarioAtual.id });
+  // 'connect' dispara na conexão inicial E em toda reconexão (celular que bloqueou a tela,
+  // troca de wifi pra 4G, servidor reiniciando). A cada vez o servidor enxerga um socket novo,
+  // sem sala nenhuma — então precisa entrar de novo, senão as mensagens param de chegar.
+  socket.on('connect', () => {
+    socket.emit('join', { userId: usuarioAtual.id });
+    if (chatAtualId) socket.emit('join_chat', chatAtualId);
+    if (socket.recuperar) { socket.recuperar = false; recarregarEstadoAtual(); }
+  });
+  socket.on('disconnect', () => { socket.recuperar = true; });
+  sincronizarContatos();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') recarregarEstadoAtual();
+  });
   socket.on('send_message_error', payload => {
     mostrarAviso(payload && payload.message ? payload.message : 'Não foi possível enviar a mídia.');
   });
@@ -490,7 +525,7 @@ function entrarNoChat() {
     carregarListaChats();
   });
   socket.on('solicitacao_entrada', ({ chatId, chatName, username }) => {
-    mostrarAviso(`${username} quer entrar no grupo "${chatName}"`);
+    // sem popup pro admin: o pedido aparece só na lista de pedidos do grupo (com o contador)
     if (chatId === chatAtualId) atualizarBadgePedidos(chatId);
   });
   socket.on('solicitacao_recusada', ({ chatName }) => {
@@ -558,6 +593,23 @@ async function marcarComoLida(chatId) {
     body: JSON.stringify({ userId: usuarioAtual.id })
   });
   carregarListaChats();
+}
+
+// busca de novo o que pode ter sido perdido enquanto o aparelho estava desconectado/dormindo
+async function recarregarEstadoAtual() {
+  if (!usuarioAtual) return;
+  try {
+    await carregarListaChats();
+    sincronizarContatos();
+    if (chatAtualId) {
+      const resp = await fetch(`/api/chats/${chatAtualId}/messages?userId=${usuarioAtual.id}`);
+      if (!resp.ok) return;
+      const data = await resp.json();
+      (data.messages || []).forEach(m => {
+        if (!document.querySelector(`[data-id="${m.id}"]`)) renderizarMensagem(m);
+      });
+    }
+  } catch (e) { /* tenta de novo na próxima reconexão */ }
 }
 
 // ---------- Lista de conversas ----------
@@ -715,25 +767,48 @@ async function carregarStats() {
   }
 }
 
-// ---------- Contatos salvos (fica só no navegador, não no servidor) ----------
+// ---------- Contatos salvos (ficam no SERVIDOR, iguais em qualquer aparelho) ----------
+// contatosCache é só uma cópia em memória da lista do servidor, pra tela não esperar rede.
+let contatosCache = [];
+
 function carregarContatos() {
-  if (!usuarioAtual) return [];
-  try { return JSON.parse(localStorage.getItem('contatos_' + usuarioAtual.id) || '[]'); }
-  catch (e) { return []; }
-}
-function salvarContatos(lista) {
-  localStorage.setItem('contatos_' + usuarioAtual.id, JSON.stringify(lista));
+  return contatosCache;
 }
 function contatoSalvo(id) {
-  return carregarContatos().some(c => c.id === id);
+  return contatosCache.some(c => c.id === id);
 }
 function salvarContato(contato) {
-  const contatos = carregarContatos().filter(c => c.id !== contato.id);
-  contatos.unshift(contato);
-  salvarContatos(contatos);
+  contatosCache = contatosCache.filter(c => c.id !== contato.id);
+  contatosCache.unshift({ id: contato.id, username: contato.username, email: contato.email || null, photoUrl: contato.photoUrl || null });
 }
 function apagarContato(id) {
-  salvarContatos(carregarContatos().filter(c => c.id !== id));
+  contatosCache = contatosCache.filter(c => c.id !== id);
+}
+
+// baixa a lista do servidor. Na primeira vez em que este navegador roda a versão nova,
+// sobe pro servidor os contatos que estavam só no localStorage (pra ninguém perder os antigos).
+async function sincronizarContatos() {
+  if (!usuarioAtual) return;
+  const chaveAntiga = 'contatos_' + usuarioAtual.id;
+  try {
+    const antigos = JSON.parse(localStorage.getItem(chaveAntiga) || '[]');
+    if (antigos.length) {
+      await Promise.all(antigos.map(c => fetch('/api/contacts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ownerId: usuarioAtual.id, contactId: c.id })
+      })));
+    }
+    localStorage.removeItem(chaveAntiga);
+  } catch (e) { /* sem problema, segue com a lista do servidor */ }
+
+  try {
+    const resp = await fetch('/api/contacts?ownerId=' + encodeURIComponent(usuarioAtual.id));
+    if (!resp.ok) return;
+    const data = await resp.json();
+    contatosCache = data.contacts || [];
+    renderContatoBanner();
+  } catch (e) { /* offline: mantém o que já tinha */ }
 }
 
 function abrirNovaConversa() {
@@ -1013,6 +1088,8 @@ async function atualizarPermissoesGrupo(chatId) {
 
 // ---------- Ícone (👤n) de pedidos de entrada pendentes, do lado do menu de 3 pontinhos ----------
 async function atualizarBadgePedidos(chatId) {
+  // só admin/dono pode ver os pedidos; pra quem não é, nem pergunta (evita o erro 403 no console)
+  if (chatId === chatAtualId && !chatAtualSouAdmin) { esconderBadgePedidos(); return; }
   const resp = await fetch(`/api/chats/${chatId}/invite?userId=${usuarioAtual.id}`);
   const btn = document.getElementById('btn-pedidos-grupo');
   if (!resp.ok) { esconderBadgePedidos(); return; } // não é admin, ou grupo sem link ainda
@@ -1237,6 +1314,9 @@ async function renderConfigGrupoModal(chatId) {
     let botoes = '';
     if (data.souDono && !m.isOwner && !m.isAdmin) {
       botoes += `<button class="btn-outline btn-compacto" onclick="promoverNoModal('${chatId}', '${m.id}')">Tornar admin</button>`;
+    }
+    if (data.souDono && !m.isOwner && m.isAdmin) {
+      botoes += `<button class="btn-outline btn-compacto" onclick="rebaixarNoModal('${chatId}', '${m.id}')">Tirar admin</button>`;
     }
     if ((data.souDono || data.souAdmin) && !m.isOwner && m.id !== usuarioAtual.id) {
       botoes += `<button class="btn-outline btn-compacto" onclick="removerDoModal('${chatId}', '${m.id}', '${escapeHtml(m.username)}')">Remover</button>`;
@@ -1687,6 +1767,17 @@ async function promoverNoModal(chatId, targetUserId) {
   renderConfigGrupoModal(chatId);
 }
 
+async function rebaixarNoModal(chatId, targetUserId) {
+  const resp = await fetch(`/api/chats/${chatId}/demote`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId: usuarioAtual.id, targetUserId })
+  });
+  const data = await resp.json();
+  if (!resp.ok) { mostrarAviso(data.error || 'Não foi possível tirar o admin.'); return; }
+  renderConfigGrupoModal(chatId);
+}
+
 async function removerDoModal(chatId, targetUserId, username) {
   const aceitou = await abrirConfirmacao({
     titulo: 'Remover do grupo',
@@ -1709,7 +1800,9 @@ async function apagarConversa(chatId, removido) {
   document.querySelectorAll('.dropdown-menu').forEach(el => el.classList.add('oculto'));
   const mensagem = removido
     ? 'Apagar essa conversa da sua lista? Ela só some pra você.'
-    : 'Apagar essa conversa? Isso apaga pra todo mundo que participa dela, não só pra você.';
+    : ((todasAsConversas.find(c => c.id === chatId) || {}).type === 'group')
+      ? 'Apagar essa conversa? Isso apaga pra todo mundo que participa dela, não só pra você.'
+      : 'Apagar essa conversa? Ela só some pra você, a outra pessoa continua com ela.';
   const aceitou = await abrirConfirmacao({ titulo: 'Apagar conversa', mensagem, textoBotao: 'Apagar' });
   if (!aceitou) return;
 
@@ -1831,7 +1924,7 @@ function criarElementoMensagem(msg) {
     if (typeof msg.replyTo === 'object') {
       const rt = msg.replyTo;
       replyHtml = `<div class="quote-box" onclick="irParaMensagem('${rt.id}')">
-        <div class="quote-nome">${escapeHtml(rt.userName)}</div>
+        <div class="quote-nome">${escapeHtml(nomeDoCitado(rt))}</div>
         <div class="quote-snippet">${escapeHtml(rt.snippet)}</div>
       </div>`;
     } else {
@@ -1845,7 +1938,7 @@ function criarElementoMensagem(msg) {
     conteudoHtml = `<div class="conteudo apagada">Mensagem apagada</div>`;
   } else if (msg.type === 'audio') {
     conteudoHtml = msg.mediaUrl
-      ? `<div class="conteudo">${montarPlayerAudio(msg)}</div>`
+      ? `<div class="conteudo conteudo-midia">${montarPlayerAudio(msg)}</div>`
       : `<div class="conteudo apagada">Áudio expirado (12h)</div>`;
   } else if (msg.type === 'video') {
     conteudoHtml = msg.mediaUrl
@@ -1857,7 +1950,7 @@ function criarElementoMensagem(msg) {
       : `<div class="conteudo apagada">Imagem expirada (12h)</div>`;
   } else if (msg.type === 'file') {
     conteudoHtml = msg.mediaUrl
-      ? `<div class="conteudo"><a class="msg-arquivo" href="${msg.mediaUrl}" target="_blank" rel="noopener">📎 ${escapeHtml(msg.content || 'arquivo')}</a></div>`
+      ? `<div class="conteudo conteudo-midia">${montarCartaoArquivo(msg)}</div>`
       : `<div class="conteudo apagada">Arquivo expirado (12h)</div>`;
   } else {
     conteudoHtml = `<div class="conteudo">${destacarMencoes(msg.content)}</div>`;
@@ -2185,6 +2278,18 @@ async function cancelarSolicitacaoConvite(code, btn) {
 }
 
 // ---------- Prévia de mensagem (usada na citação de resposta) ----------
+// nome mostrado na caixinha de citação, sempre do ponto de vista de quem está VENDO:
+// "Você" se a mensagem citada é minha, senão o nick de quem escreveu.
+function nomeDoCitado(rt) {
+  if (rt.userId === usuarioAtual.id) return 'Você';
+  if (rt.realName) return rt.realName;
+  const original = mensagensCacheAtual.get(rt.id);
+  if (original && original.senderUsername) return original.senderUsername;
+  // respostas antigas (sem realName): se o nome gravado não é "Você", serve; senão, no PV é o outro
+  if (rt.userName && rt.userName !== 'Você') return rt.userName;
+  if (chatAtualOutro && chatAtualOutro.username) return chatAtualOutro.username;
+  return 'Usuário';
+}
 function nomeDoRemetente(msg) {
   if (msg.senderId === usuarioAtual.id) return 'Você';
   return msg.senderUsername || 'Usuário removido';
@@ -2284,6 +2389,7 @@ function escolherMencao(username) {
   const depois = input.value.slice(mencaoAtiva.fim);
   const inserido = '@' + username + ' ';
   input.value = antes + inserido + depois;
+  atualizarBotoesInput();
   const posicao = (antes + inserido).length;
   input.focus();
   input.setSelectionRange(posicao, posicao);
@@ -2307,7 +2413,15 @@ function enviarTexto() {
   });
 
   input.value = '';
+  atualizarBotoesInput();
   cancelarResposta();
+}
+
+// celular: com texto digitado mostra "enviar", sem texto mostra o microfone (o CSS faz a troca)
+function atualizarBotoesInput() {
+  const input = document.getElementById('input-texto');
+  const area = input && input.closest('.input-area');
+  if (area) area.classList.toggle('digitando', input.value.trim().length > 0);
 }
 
 // ---------- Responder ----------
@@ -2318,6 +2432,9 @@ function responderMensagem(id) {
     id: msg.id,
     userId: msg.senderId,
     userName: nomeDoRemetente(msg),
+    // nome "de verdade" de quem escreveu — o userName acima vira "Você" pra quem respondeu,
+    // e esse texto fica gravado na mensagem, então o outro lado via "Você" errado.
+    realName: msg.senderId === usuarioAtual.id ? usuarioAtual.username : (msg.senderUsername || 'Usuário removido'),
     snippet: previaDaMensagem(msg)
   };
   document.getElementById('reply-preview-nome').textContent = respondendoA.userName;
@@ -2616,6 +2733,68 @@ async function enviarAnexo(file) {
 // =========================================================
 //  PLAYER DE ÁUDIO
 // =========================================================
+// <<ICONES_ARQUIVO>>
+// ---------- Cartão de arquivo: ícone por tipo + nome ----------
+// Cada grupo: [cor, rótulo mostrado no ícone (vazio = usa a própria extensão), extensões]
+const ICONES_ARQUIVO = {};
+(function () {
+  const grupos = [
+    ['#e5484d', 'PDF',  ['pdf']],
+    ['#3b82f6', 'DOC',  ['doc', 'docx', 'odt', 'rtf']],
+    ['#22a06b', 'XLS',  ['xls', 'xlsx', 'ods']],
+    ['#22a06b', 'CSV',  ['csv']],
+    ['#f97316', 'PPT',  ['ppt', 'pptx', 'odp']],
+    ['#8b8f9c', 'TXT',  ['txt', 'log', 'md']],
+    ['#d9a400', 'ZIP',  ['zip', 'rar', '7z', 'tar', 'gz']],
+    ['#8b5cf6', '',     ['js', 'ts', 'py', 'html', 'css', 'json', 'java', 'c', 'cpp', 'cs', 'php', 'sql', 'xml', 'sh']],
+    ['#ec4899', '',     ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac']],
+    ['#14b8a6', '',     ['mp4', 'webm', 'mov', 'mkv', 'avi']],
+    ['#06b6d4', '',     ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']],
+    ['#64748b', 'APK',  ['apk']],
+    ['#64748b', 'EXE',  ['exe', 'msi']]
+  ];
+  grupos.forEach(([cor, rotulo, exts]) => exts.forEach(e => {
+    ICONES_ARQUIVO[e] = { cor, rotulo: rotulo || e.toUpperCase() };
+  }));
+})();
+// Tipos que o navegador sabe mostrar sozinho: abrem em nova aba. O resto baixa.
+const ARQUIVOS_ABREM_NO_NAVEGADOR = ['pdf', 'txt', 'log', 'md', 'json', 'csv'];
+// <</ICONES_ARQUIVO>>
+
+function extensaoDoArquivo(nome) {
+  const m = /\.([A-Za-z0-9]+)$/.exec(String(nome || '').trim());
+  return m ? m[1].toLowerCase() : '';
+}
+
+function tipoDoArquivo(nome) {
+  const ext = extensaoDoArquivo(nome);
+  const base = ICONES_ARQUIVO[ext] || { cor: '#64748b', rotulo: ext ? ext.toUpperCase().slice(0, 4) : 'ARQ' };
+  return { ext, cor: base.cor, rotulo: base.rotulo, abre: ARQUIVOS_ABREM_NO_NAVEGADOR.includes(ext) };
+}
+
+// Deixa o nome quebrar depois de _ e - e antes do ponto, assim a extensão (.pdf) nunca é cortada ao meio
+function nomeQuebravel(nome) {
+  return escapeHtml(nome).replace(/([_-])/g, '$1<wbr>').replace(/\./g, '<wbr>.');
+}
+
+function montarCartaoArquivo(msg) {
+  const nome = msg.content || 'arquivo';
+  const t = tipoDoArquivo(nome);
+  const tamanhoFonte = t.rotulo.length > 3 ? 9 : 11;
+  const icone = '<svg class="arq-icone" viewBox="0 0 40 48" aria-hidden="true">'
+    + '<path d="M6 2h20l12 12v30a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2z" fill="' + t.cor + '"/>'
+    + '<path d="M26 2l12 12H28a2 2 0 0 1-2-2z" fill="rgba(255,255,255,.38)"/>'
+    + '<text x="20" y="37" text-anchor="middle" font-size="' + tamanhoFonte + '" font-weight="800" '
+    + 'font-family="Arial, Helvetica, sans-serif" fill="#fff">' + escapeHtml(t.rotulo) + '</text></svg>';
+  const atributos = t.abre
+    ? 'target="_blank" rel="noopener"'
+    : 'download="' + escapeAttr(nome) + '" target="_blank" rel="noopener"';
+  return '<a class="arq-cartao" href="' + escapeAttr(msg.mediaUrl) + '" ' + atributos + ' title="' + escapeAttr(nome) + '">'
+    + icone
+    + '<span class="arq-info"><span class="arq-nome">' + nomeQuebravel(nome) + '</span>'
+    + '<span class="arq-sub">' + escapeHtml(t.rotulo) + ' · ' + (t.abre ? 'Abrir' : 'Baixar') + '</span></span></a>';
+}
+
 const AUDIO_BARRAS = 34;
 
 function ondasDoAudio(seed) {
@@ -2631,6 +2810,7 @@ function ondasDoAudio(seed) {
 }
 
 function montarPlayerAudio(msg) {
+  // .replace(...) tira as quebras de linha e espaços do template, que viravam linhas em branco
   return `
     <div class="audio-player">
       <button class="audio-btn" type="button" aria-label="Tocar áudio">
@@ -2645,7 +2825,7 @@ function montarPlayerAudio(msg) {
         </div>
       </div>
       <audio preload="metadata" src="${escapeAttr(msg.mediaUrl)}"></audio>
-    </div>`;
+    </div>`.replace(/>\s+</g, '><').trim();
 }
 
 function formatarTempoAudio(seg) {
@@ -2842,13 +3022,14 @@ async function abrirPerfilUsuario(userId) {
     const url = bases[r.network] + encodeURIComponent(handle);
     return `<a class="perfil-rede-link" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer"><span class="perfil-rede-icone mdi mdi-${r.network === 'x' ? 'alpha-x-circle' : r.network === 'youtube' ? 'youtube' : r.network}"></span><span class="perfil-rede-nome">${nomes[r.network]}</span><span class="perfil-rede-handle">@${escapeHtml(handle)}</span><span class="mdi mdi-open-in-new perfil-rede-externo"></span></a>`;
   }).join('');
+  const virtualContactHtml = u.contactNumber ? `<div class="perfil-contato-link perfil-contato-virtual"><span class="mdi mdi-identifier"></span><span>Contato: <strong>${escapeHtml(u.contactNumber)}</strong></span><button type="button" class="perfil-numero-copiar" onclick="navigator.clipboard.writeText('${escapeAttr(u.contactNumber)}').then(()=>mostrarAviso('Número copiado!')).catch(()=>mostrarAviso('Número: ${escapeAttr(u.contactNumber)}'))" aria-label="Copiar número"><span class="mdi mdi-content-copy"></span></button></div>` : '';
   const phoneHtml = u.phone ? `<a class="perfil-contato-link" href="https://wa.me/${u.phone.replace(/\D/g, '')}" target="_blank" rel="noopener noreferrer"><span class="mdi mdi-whatsapp"></span><span>${escapeHtml(u.phone)}</span><span class="mdi mdi-open-in-new"></span></a>` : '';
   root.innerHTML = `
     <div class="modal-overlay perfil-overlay" id="modal-overlay">
       <div class="modal-box modal-box--perfil perfil-publico-card">
         <button class="perfil-fechar-x" id="perfil-usuario-fechar-x" type="button" aria-label="Fechar perfil">×</button>
         <div class="perfil-publico-hero">${fotoHtml}<h3 class="modal-title info-grupo-nome">${escapeHtml(u.username)}</h3><span class="perfil-publico-tag">Perfil do ChatDevs</span>${bioHtml}</div>
-        <div class="perfil-publico-detalhes">${phoneHtml}${linksHtml ? `<div class="perfil-redes-lista">${linksHtml}</div>` : '<p class="perfil-bio perfil-bio--vazia">Nenhuma rede social adicionada.</p>'}</div>
+        <div class="perfil-publico-detalhes">${virtualContactHtml}${phoneHtml}${linksHtml ? `<div class="perfil-redes-lista">${linksHtml}</div>` : '<p class="perfil-bio perfil-bio--vazia">Nenhuma rede social adicionada.</p>'}</div>
         <div class="modal-actions"><button class="btn-ok btn-compacto" id="perfil-usuario-fechar" type="button">Fechar perfil</button></div>
       </div>
     </div>`;
