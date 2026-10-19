@@ -430,6 +430,14 @@ async function fazerLogin() {
   try {
     const resp = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ emailOrUsername, password }) });
     const data = await resp.json(); if (!resp.ok) { erroEl.textContent = data.error || 'Não foi possível entrar.'; return; }
+    if (data.verificationRequired) {
+      emailPendenteVerificacao = data.email || '';
+      document.getElementById('verify-email-label').textContent = emailPendenteVerificacao;
+      document.getElementById('verify-code').value = '';
+      document.getElementById('verify-erro').textContent = '';
+      mostrarTela('verificacao');
+      return;
+    }
     usuarioAtual = data.user; salvarConta(usuarioAtual); entrarNoChat();
   } catch (e) { erroEl.textContent = 'Falha de conexão. Tente novamente.'; }
 }
@@ -2099,7 +2107,6 @@ async function abrirEditarPerfil() {
         <div class="perfil-editor-campos">
           <label class="perfil-campo"><span>Bio <small>até 240 caracteres</small></span><textarea id="perfil-bio-input" maxlength="240" rows="3" placeholder="Uma frase sobre você...">${escapeHtml(usuarioAtual.bio || '')}</textarea></label>
           <div class="perfil-campo perfil-contato-fixo"><span>Seu número de contato exclusivo</span><div class="perfil-numero-fixo-linha"><strong>${escapeHtml(usuarioAtual.contactNumber || 'Gerando número…')}</strong>${usuarioAtual.contactNumber ? `<button type="button" class="btn-outline btn-compacto" id="perfil-copiar-numero" aria-label="Copiar número de contato"><span class="mdi mdi-content-copy"></span> Copiar</button>` : ''}</div><small>Esse número de 7 dígitos é fixo e permite que outras pessoas encontrem seu perfil.</small></div>
-          <label class="perfil-campo"><span>Número de telefone (opcional)</span><input id="perfil-phone-input" type="tel" maxlength="30" value="${escapeAttr(usuarioAtual.phone || '')}" placeholder="+55 11 99999-9999" autocomplete="tel"></label>
           <label class="perfil-campo perfil-campo-cor"><span>Cor da borda da foto</span><input id="perfil-ring-color" type="color" value="${escapeAttr(ring)}"></label>
           <div class="perfil-socials"><span class="config-label">Suas redes sociais</span><p class="perfil-ajuda">Adicione o usuário; o link será criado automaticamente no seu perfil.</p>
             ${socials.map(net => `<label class="perfil-campo perfil-social-campo"><span>${net.label}</span><input data-social="${net.id}" maxlength="100" value="${escapeAttr(socialAtual(net.id))}" placeholder="${net.placeholder}"></label>`).join('')}
@@ -2128,7 +2135,7 @@ async function abrirEditarPerfil() {
   inputBusca.addEventListener('keydown', e => { if (e.key === 'Enter') adicionarNaListaPrivacidade(inputBusca.value.trim()); });
   document.getElementById('perfil-salvar').onclick = async () => {
     const socials = Array.from(document.querySelectorAll('[data-social]')).map(el => ({ network: el.dataset.social, handle: el.value.trim() })).filter(x => x.handle);
-    const resp = await fetch(`/api/users/${usuarioAtual.id}/profile`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: usuarioAtual.id, bio: document.getElementById('perfil-bio-input').value, phone: document.getElementById('perfil-phone-input').value, ringColor: document.getElementById('perfil-ring-color').value, socials }) });
+    const resp = await fetch(`/api/users/${usuarioAtual.id}/profile`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: usuarioAtual.id, bio: document.getElementById('perfil-bio-input').value, ringColor: document.getElementById('perfil-ring-color').value, socials }) });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) { mostrarAviso(data.error || 'Não foi possível salvar o perfil.'); return; }
     usuarioAtual = { ...usuarioAtual, ...data.user };
