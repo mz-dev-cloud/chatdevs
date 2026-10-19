@@ -418,11 +418,44 @@ function abrirSeletorReacao(messageId, modo = 'completo', event) {
     : `<div class="reaction-grid">${EMOJIS_COMPLETOS.map(emoji => `<button class="reaction-option" onclick="reagirMensagem('${messageId}','${emoji}',event)" aria-label="Reagir com ${emoji}" title="${emoji}"><img src="${appleEmojiUrl(emoji)}" alt="${emoji}" loading="lazy"></button>`).join('')}</div><div class="reaction-picker-foot"><span>Escolha um emoji</span><button class="reaction-close" onclick="fecharSeletoresReacao()" aria-label="Fechar">×</button></div>`;
 }
 function alternarSeletorReacao(messageId, event) { abrirSeletorReacao(messageId, 'completo', event); }
+if (!window.__menuMsgFecharLigado) {
+  window.__menuMsgFecharLigado = true;
+  const fecharMenusMensagem = () => document.querySelectorAll('#mensagens .msg.menu-mensagem-aberto').forEach(n => n.classList.remove('menu-mensagem-aberto'));
+  document.addEventListener('click', e => { if (!e.target.closest('#mensagens .msg')) fecharMenusMensagem(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') fecharMenusMensagem(); });
+}
 function ativarGestosMensagem(el, msg) {
   if (!el || msg.type === 'system') return;
   let timer = null, longPress = false, startX = 0, startY = 0, lastTap = 0;
   const abrirAcoes = () => { document.querySelectorAll('#mensagens .msg.menu-mensagem-aberto').forEach(n => n.classList.remove('menu-mensagem-aberto')); el.classList.add('menu-mensagem-aberto'); };
   el.addEventListener('contextmenu', e => { e.preventDefault(); abrirAcoes(); });
+
+  // ---- PC (mouse): setinha ▾ ao passar o mouse + clicar e segurar ----
+  if (!el.querySelector('.btn-menu-msg')) {
+    const seta = document.createElement('button');
+    seta.type = 'button';
+    seta.className = 'btn-menu-msg';
+    seta.setAttribute('aria-label', 'Abrir ações da mensagem');
+    seta.innerHTML = '▾';
+    seta.addEventListener('click', e => {
+      e.stopPropagation();
+      if (el.classList.contains('menu-mensagem-aberto')) el.classList.remove('menu-mensagem-aberto');
+      else abrirAcoes();
+    });
+    el.appendChild(seta);
+  }
+  let mouseTimer = null, mouseX = 0, mouseY = 0;
+  el.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    if (e.target.closest('button, a, video, audio, input, .conteudo-midia, .message-reactions, .acoes, .quote-box, .btn-acessar-link')) return;
+    mouseX = e.clientX; mouseY = e.clientY;
+    mouseTimer = setTimeout(() => { mouseTimer = null; abrirAcoes(); }, 450);
+  });
+  el.addEventListener('mousemove', e => {
+    if (mouseTimer && (Math.abs(e.clientX - mouseX) > 6 || Math.abs(e.clientY - mouseY) > 6)) { clearTimeout(mouseTimer); mouseTimer = null; }
+  });
+  ['mouseup', 'mouseleave'].forEach(ev => el.addEventListener(ev, () => { clearTimeout(mouseTimer); mouseTimer = null; }));
+
   el.addEventListener('touchstart', e => {
     if (!e.touches || !e.touches[0]) return;
     startX = e.touches[0].clientX; startY = e.touches[0].clientY; longPress = false;
