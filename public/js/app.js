@@ -14,7 +14,7 @@ let socket = null;
 let gravador = null;
 let chunksGravacao = [];
 let tipoGravando = null;
-let filtroConversas = 'todas'; // 'todas' | 'grupo'
+let filtroConversas = 'todas'; // 'todas' | 'grupo' | 'arquivadas'
 let todasAsConversas = []; // cache da última lista carregada
 
 // ---------- Controle de telas ----------
@@ -372,8 +372,82 @@ document.addEventListener('click', e => {
 
 function filtrarConversas(tipo) {
   filtroConversas = tipo;
-  renderizarListaChats();
-  document.getElementById('menu-busca').classList.add('oculto');
+  document.getElementById('menu-busca')?.classList.add('oculto');
+  carregarListaChats();
+}
+
+async function arquivarConversa(chatId, archived = true) {
+  if (!usuarioAtual || !chatId) return;
+  try {
+    const resp = await fetch(`/api/chats/${encodeURIComponent(chatId)}/archive`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: usuarioAtual.id, archived: !!archived })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Não foi possível atualizar o arquivo.');
+    mostrarAviso(archived ? 'Conversa arquivada.' : 'Conversa desarquivada.', 'sucesso');
+    if (chatAtualId === chatId && archived) voltarHome();
+    await carregarListaChats();
+  } catch (e) { mostrarAviso(e.message || 'Não foi possível arquivar a conversa.'); }
+}
+
+function appleEmojiUrl(emoji) {
+  const codes = { '👍':'1f44d', '❤️':'2764-fe0f', '😂':'1f602', '😮':'1f62e', '😢':'1f622', '🙏':'1f64f', '🔥':'1f525', '👏':'1f44f' };
+  return 'https://cdn.jsdelivr.net/gh/iamcal/emoji-data@master/img-apple-160/' + (codes[emoji] || '1f44d') + '.png';
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.message-reactions')) {
+    document.querySelectorAll('.reaction-picker.aberto').forEach(p => p.classList.remove('aberto'));
+  }
+});
+
+function alternarSeletorReacao(messageId, event) {
+  if (event) { event.stopPropagation(); event.preventDefault(); }
+  const msg = document.querySelector(`#mensagens [data-id="${messageId}"]`);
+  if (!msg) return;
+  const picker = msg.querySelector('.reaction-picker');
+  if (picker) picker.classList.toggle('aberto');
+}
+
+async function reagirMensagem(messageId, emoji, event) {
+  if (event) { event.stopPropagation(); event.preventDefault(); }
+  if (!usuarioAtual || !messageId) return;
+  try {
+    const resp = await fetch(`/api/messages/${encodeURIComponent(messageId)}/reaction`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: usuarioAtual.id, emoji })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Não foi possível reagir.');
+    const msg = mensagensCacheAtual.get(messageId);
+    if (msg) {
+      msg.reactions = data.reactions || [];
+      const antigo = document.querySelector(`#mensagens [data-id="${messageId}"]`);
+      if (antigo) antigo.replaceWith(criarElementoMensagem(msg));
+    }
+  } catch (e) { mostrarAviso(e.message || 'Não foi possível reagir à mensagem.'); }
+}
+
+async function fixarMensagem(messageId) {
+  if (!usuarioAtual || !chatAtualId || chatAtualRemovido) return;
+  try {
+    const resp = await fetch(`/api/chats/${encodeURIComponent(chatAtualId)}/pin`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: usuarioAtual.id, messageId })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Não foi possível fixar a mensagem.');
+    const msg = mensagensCacheAtual.get(messageId);
+    if (msg) msg.pinned = !!data.pinned;
+    mensagensCacheAtual.forEach((item, id) => {
+      item.pinned = id === messageId && !!data.pinned;
+      const antigo = document.querySelector(`#mensagens [data-id="${id}"]`);
+      if (antigo) antigo.replaceWith(criarElementoMensagem(item));
+    });
+    mostrarAviso(data.pinned ? 'Mensagem fixada na conversa.' : 'Mensagem desafixada.', 'sucesso');
+    carregarListaChats();
+  } catch (e) { mostrarAviso(e.message || 'Não foi possível fixar a mensagem.'); }
 }
 
 // ---------- Auth ----------
@@ -506,6 +580,22 @@ function entrarNoChat() {
     if (msg.chatId === chatAtualId) atualizarMensagemNaTela(msg);
     mensagensCacheAtual.set(msg.id, msg);
   });
+  socket.on('message_reactions_updated', payload => {
+    if (!payload || payload.chatId !== chatAtualId) return;
+    const msg = mensagensCacheAtual.get(payload.messageId);
+    if (!msg) return;
+    msg.reactions = payload.reactions || [];
+    const antigo = document.querySelector(`#mensagens [data-id="${payload.messageId}"]`);
+    if (antigo) antigo.replaceWith(criarElementoMensagem(msg));
+  });
+  socket.on('message_pin_updated', payload => {
+    if (!payload || payload.chatId !== chatAtualId) return;
+    mensagensCacheAtual.forEach((msg, id) => {
+      msg.pinned = id === payload.messageId && !!payload.pinned;
+      const antigo = document.querySelector(`#mensagens [data-id="${id}"]`);
+      if (antigo) antigo.replaceWith(criarElementoMensagem(msg));
+    });
+  });
   socket.on('message_deleted', ({ id }) => {
     const cache = mensagensCacheAtual.get(id);
     if (cache) {
@@ -630,7 +720,8 @@ async function recarregarEstadoAtual() {
 
 // ---------- Lista de conversas ----------
 async function carregarListaChats() {
-  const resp = await fetch('/api/chats?userId=' + usuarioAtual.id);
+  const view = filtroConversas === 'arquivadas' ? '&view=archived' : '';
+  const resp = await fetch('/api/chats?userId=' + encodeURIComponent(usuarioAtual.id) + view);
   const data = await resp.json();
   todasAsConversas = data.chats;
   renderizarListaChats();
@@ -641,6 +732,7 @@ function renderizarListaChats() {
 
   const filtradas = todasAsConversas.filter(chat => {
     if (filtroConversas === 'grupo' && chat.type !== 'group') return false;
+    if (filtroConversas !== 'arquivadas' && chat.archived) return false;
     if (busca && !chat.name.toLowerCase().includes(busca)) return false;
     return true;
   });
@@ -652,10 +744,19 @@ function renderizarListaChats() {
   if (todasAsConversas.length === 0) {
     vazio.classList.remove('oculto');
     container.classList.add('oculto');
+    const textoVazio = vazio.querySelector('p');
+    if (textoVazio) textoVazio.innerHTML = filtroConversas === 'arquivadas'
+      ? 'Nenhuma conversa arquivada por enquanto.'
+      : 'Você ainda não tem nenhuma conversa.<br>Use o botão acima pra chamar alguém pelo nome de usuário ou email.';
     return;
   }
-  vazio.classList.add('oculto');
-  container.classList.remove('oculto');
+  vazio.classList.toggle('oculto', filtradas.length > 0);
+  container.classList.toggle('oculto', filtradas.length === 0);
+  if (!filtradas.length) {
+    const textoVazio = vazio.querySelector('p');
+    if (textoVazio) textoVazio.textContent = filtroConversas === 'arquivadas' ? 'Nenhuma conversa arquivada por enquanto.' : 'Nenhuma conversa encontrada.';
+    return;
+  }
 
   filtradas.forEach(chat => {
     const div = document.createElement('div');
@@ -677,7 +778,7 @@ function renderizarListaChats() {
         <button class="item-menu-btn" onclick="abrirMenuChatItem(event, '${chat.id}')" aria-label="Opções da conversa">⋮</button>
       </div>
       <div class="item-chat-preview-row">
-        <div class="preview">${escapeHtml(chat.lastMessage || 'Sem mensagens ainda')}</div>
+        <div class="preview">${chat.pinnedMessageId ? '<i class="mdi mdi-pin-outline" aria-label="Mensagem fixada"></i> ' : ''}${escapeHtml(chat.lastMessage || 'Sem mensagens ainda')}</div>
         ${badgeHtml}
       </div>`;
     const avatarBtn = div.querySelector('.avatar-perfil-abrir');
@@ -726,13 +827,14 @@ function abrirMenuChatItem(event, chatId) {
   const chat = todasAsConversas.find(c => c.id === chatId);
   if (!chat) return;
 
+  const archiveItem = `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); arquivarConversa('${chat.id}', ${!chat.archived})"><i class="mdi ${chat.archived ? 'mdi-archive-arrow-up-outline' : 'mdi-archive-outline'}"></i><span>${chat.archived ? 'Desarquivar conversa' : 'Arquivar conversa'}</span></div>`;
   const itens = chat.removidoDoGrupo
     ? `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}', true)"><span>Apagar conversa</span></div>`
     : chat.type === 'group'
-    ? `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); abrirConfigGrupo('${chat.id}')"><span>Configurações do grupo</span></div>
+    ? `${archiveItem}<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); abrirConfigGrupo('${chat.id}')"><span>Configurações do grupo</span></div>
        <div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}')"><span>Apagar conversa</span></div>
        <div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); sairDoGrupo('${chat.id}')"><span>Sair do grupo</span></div>`
-    : `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}')"><span>Apagar conversa</span></div>
+    : `${archiveItem}<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); apagarConversa('${chat.id}')"><span>Apagar conversa</span></div>
        ${chat.ehAutoConversa ? '' : `<div class="dropdown-item dropdown-clicavel" onclick="fecharMenuFlutuante(); bloquearUsuario('${chat.otherUserId}', '${chat.id}')"><span>Bloquear usuário</span></div>`}`;
 
   abrirMenuFlutuante(event.currentTarget, itens);
@@ -1219,14 +1321,17 @@ function renderMenuChatAtual() {
   }
 
   const ehAutoConversa = chatAtualOutro && chatAtualOutro.id === usuarioAtual.id;
+  const chatAtualNaLista = todasAsConversas.find(c => c.id === chatAtualId);
+  const estaArquivada = !!(chatAtualNaLista && chatAtualNaLista.archived);
+  const itemArquivo = `<div class="dropdown-item dropdown-clicavel" onclick="document.getElementById('menu-chat-atual').classList.add('oculto'); arquivarConversa(chatAtualId, ${!estaArquivada})"><i class="mdi ${estaArquivada ? 'mdi-archive-arrow-up-outline' : 'mdi-archive-outline'}"></i><span>${estaArquivada ? 'Desarquivar conversa' : 'Arquivar conversa'}</span></div>`;
 
   el.innerHTML = chatAtualTipo === 'group'
     ? `<div class="dropdown-item dropdown-clicavel" onclick="document.getElementById('menu-chat-atual').classList.add('oculto'); document.querySelector('.chat-options-trigger')?.setAttribute('aria-expanded','false'); abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i><span>Aparência do chat</span></div>
-       <div class="dropdown-item dropdown-clicavel" onclick="abrirConfigGrupo(chatAtualId)"><span>Configurações do grupo</span></div>
+       ${itemArquivo}<div class="dropdown-item dropdown-clicavel" onclick="abrirConfigGrupo(chatAtualId)"><span>Configurações do grupo</span></div>
        <div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId)"><span>Apagar conversa</span></div>
        <div class="dropdown-item dropdown-clicavel" onclick="sairDoGrupo(chatAtualId)"><span>Sair do grupo</span></div>`
     : `<div class="dropdown-item dropdown-clicavel" onclick="document.getElementById('menu-chat-atual').classList.add('oculto'); document.querySelector('.chat-options-trigger')?.setAttribute('aria-expanded','false'); abrirAparenciaChat()"><i class="mdi mdi-palette-outline"></i><span>Aparência do chat</span></div>
-       <div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId)"><span>Apagar conversa</span></div>
+       ${itemArquivo}<div class="dropdown-item dropdown-clicavel" onclick="apagarConversa(chatAtualId)"><span>Apagar conversa</span></div>
        ${ehAutoConversa ? '' : `<div class="dropdown-item dropdown-clicavel" onclick="bloquearUsuario(chatAtualOutro && chatAtualOutro.id, chatAtualId)"><span>Bloquear usuário</span></div>`}`;
 }
 
@@ -1990,8 +2095,10 @@ function criarElementoMensagem(msg) {
   const editadoTxt = msg.editedAt ? ' (editada)' : '';
 
   let acoesHtml = '<div class="acoes">';
+  if (!msg.deleted) acoesHtml += `<span onclick="alternarSeletorReacao('${msg.id}', event)">Reagir</span>`;
   acoesHtml += `<span onclick="responderMensagem('${msg.id}')">Responder</span>`;
   if (!msg.deleted) acoesHtml += `<span onclick="iniciarEncaminhar('${msg.id}')">Encaminhar</span>`;
+  if (!msg.deleted && !chatAtualRemovido) acoesHtml += `<span onclick="fixarMensagem('${msg.id}')">${msg.pinned ? 'Desafixar' : 'Fixar'}</span>`;
   if (minha && !msg.deleted) {
     if (Date.now() - msg.createdAt < 60000 && msg.type === 'text') {
       acoesHtml += `<span onclick="editarMensagem('${msg.id}')">Editar</span>`;
@@ -2000,8 +2107,18 @@ function criarElementoMensagem(msg) {
   }
   acoesHtml += '</div>';
 
-    const etiquetaEncaminhada = (msg.encaminhada && !msg.deleted) ? '<div class="msg-encaminhada">↪ Encaminhada</div>' : '';
-  div.innerHTML = `<span class="swipe-icone-responder">↩</span><span class="msg-check">✓</span>${btnResponderRapidoHtml}${remetenteHtml}${etiquetaEncaminhada}${replyHtml}${conteudoHtml}${linkBtnHtml}<div class="hora">${hora}${editadoTxt}</div>${acoesHtml}`;
+  const emojisApple = ['👍','❤️','😂','😮','😢','🙏','🔥','👏'];
+  const minhasReacoes = Array.isArray(msg.reactions) ? msg.reactions : [];
+  const resumoReacoes = emojisApple.map(emoji => {
+    const quantidade = minhasReacoes.filter(r => r.emoji === emoji).length;
+    if (!quantidade) return '';
+    const minhaReacao = minhasReacoes.some(r => r.userId === usuarioAtual.id && r.emoji === emoji);
+    return `<button class="reaction-chip ${minhaReacao ? 'minha-reacao' : ''}" onclick="reagirMensagem('${msg.id}','${emoji}',event)" title="${quantidade} reação(ões)"><img src="${appleEmojiUrl(emoji)}" alt="${emoji}"><span>${quantidade}</span></button>`;
+  }).join('');
+  const reactionsHtml = !msg.deleted ? `<div class="message-reactions ${resumoReacoes ? 'tem-reacoes' : ''}">${resumoReacoes}<div class="reaction-picker" role="group" aria-label="Escolher reação">${emojisApple.map(emoji => `<button class="reaction-option" onclick="reagirMensagem('${msg.id}','${emoji}',event)" aria-label="Reagir com ${emoji}" title="${emoji}"><img src="${appleEmojiUrl(emoji)}" alt="${emoji}"></button>`).join('')}</div></div>` : '';
+  const etiquetaFixada = msg.pinned ? '<div class="msg-fixada"><i class="mdi mdi-pin"></i><span>Mensagem fixada</span></div>' : '';
+  const etiquetaEncaminhada = (msg.encaminhada && !msg.deleted) ? '<div class="msg-encaminhada">↪ Encaminhada</div>' : '';
+  div.innerHTML = `<span class="swipe-icone-responder">↩</span><span class="msg-check">✓</span>${btnResponderRapidoHtml}${remetenteHtml}${etiquetaFixada}${etiquetaEncaminhada}${replyHtml}${conteudoHtml}${linkBtnHtml}${reactionsHtml}<div class="hora">${hora}${editadoTxt}</div>${acoesHtml}`;
   ligarPlayerAudio(div);
   if (msgsSelecionadas && msgsSelecionadas.has(msg.id)) div.classList.add('msg-selecionada');
   const btnLink = div.querySelector('.btn-acessar-link');
