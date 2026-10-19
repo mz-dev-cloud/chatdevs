@@ -410,6 +410,14 @@ async function entrarComGoogle() {
       try {
         const r = await fetch('/api/google-login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ credential: response.credential }) });
         const d = await r.json(); if (!r.ok) { alert(d.error || 'Não foi possível entrar com Google.'); return; }
+        if (d.verificationRequired) {
+          emailPendenteVerificacao = d.email || '';
+          document.getElementById('verify-email-label').textContent = emailPendenteVerificacao;
+          document.getElementById('verify-code').value = '';
+          document.getElementById('verify-erro').textContent = '';
+          mostrarTela('verificacao');
+          return;
+        }
         usuarioAtual = d.user; salvarConta(usuarioAtual); entrarNoChat();
       } catch (e) { alert('Falha de conexão ao entrar com Google.'); }
     } });
@@ -2034,6 +2042,15 @@ function atualizarAvatarTopo() {
 // ---------- Janela de editar perfil completo ----------
 async function abrirEditarPerfil() {
   const root = document.getElementById('modal-root');
+  // Refresh the current profile from the server so the fixed contact number is never hidden by stale localStorage.
+  try {
+    const profileResp = await fetch(`/api/users/${usuarioAtual.id}/public?viewerId=${encodeURIComponent(usuarioAtual.id)}`);
+    if (profileResp.ok) {
+      const profile = await profileResp.json();
+      usuarioAtual = { ...usuarioAtual, ...profile };
+      localStorage.setItem('usuario', JSON.stringify(usuarioAtual));
+    }
+  } catch (_) {}
   const respPriv = await fetch(`/api/users/${usuarioAtual.id}/photo-privacy`);
   const priv = await respPriv.json().catch(() => ({ privacy: 'todos', allowList: [] }));
   const sociais = Array.isArray(usuarioAtual.socials) ? usuarioAtual.socials : [];
@@ -2081,7 +2098,8 @@ async function abrirEditarPerfil() {
         </div>
         <div class="perfil-editor-campos">
           <label class="perfil-campo"><span>Bio <small>até 240 caracteres</small></span><textarea id="perfil-bio-input" maxlength="240" rows="3" placeholder="Uma frase sobre você...">${escapeHtml(usuarioAtual.bio || '')}</textarea></label>
-          <label class="perfil-campo"><span>Número de contato</span><input id="perfil-phone-input" type="tel" maxlength="30" value="${escapeAttr(usuarioAtual.phone || '')}" placeholder="+55 11 99999-9999" autocomplete="tel"></label>
+          <div class="perfil-campo perfil-contato-fixo"><span>Seu número de contato exclusivo</span><div class="perfil-numero-fixo-linha"><strong>${escapeHtml(usuarioAtual.contactNumber || 'Gerando número…')}</strong>${usuarioAtual.contactNumber ? `<button type="button" class="btn-outline btn-compacto" id="perfil-copiar-numero" aria-label="Copiar número de contato"><span class="mdi mdi-content-copy"></span> Copiar</button>` : ''}</div><small>Esse número de 7 dígitos é fixo e permite que outras pessoas encontrem seu perfil.</small></div>
+          <label class="perfil-campo"><span>Número de telefone (opcional)</span><input id="perfil-phone-input" type="tel" maxlength="30" value="${escapeAttr(usuarioAtual.phone || '')}" placeholder="+55 11 99999-9999" autocomplete="tel"></label>
           <label class="perfil-campo perfil-campo-cor"><span>Cor da borda da foto</span><input id="perfil-ring-color" type="color" value="${escapeAttr(ring)}"></label>
           <div class="perfil-socials"><span class="config-label">Suas redes sociais</span><p class="perfil-ajuda">Adicione o usuário; o link será criado automaticamente no seu perfil.</p>
             ${socials.map(net => `<label class="perfil-campo perfil-social-campo"><span>${net.label}</span><input data-social="${net.id}" maxlength="100" value="${escapeAttr(socialAtual(net.id))}" placeholder="${net.placeholder}"></label>`).join('')}
@@ -2094,6 +2112,8 @@ async function abrirEditarPerfil() {
   const fechar = () => { root.innerHTML = ''; };
   document.getElementById('perfil-fechar-x').onclick = fechar;
   document.getElementById('perfil-cancelar').onclick = fechar;
+  const copiarNumeroBtn = document.getElementById('perfil-copiar-numero');
+  if (copiarNumeroBtn && usuarioAtual.contactNumber) copiarNumeroBtn.onclick = () => navigator.clipboard.writeText(String(usuarioAtual.contactNumber)).then(() => mostrarAviso('Número de contato copiado!')).catch(() => mostrarAviso(`Seu número: ${usuarioAtual.contactNumber}`));
   document.getElementById('modal-overlay').onclick = e => { if (e.target.id === 'modal-overlay') fechar(); };
   document.getElementById('perfil-trocar-foto').onclick = () => document.getElementById('perfil-foto-input').click();
   document.getElementById('perfil-foto-input').onchange = e => { if (e.target.files[0]) trocarFotoPerfil(e.target.files[0]); };
